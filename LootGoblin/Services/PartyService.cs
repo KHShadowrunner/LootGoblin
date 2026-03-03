@@ -64,7 +64,7 @@ public class PartyService : IDisposable
     {
         if (!_clientState.IsLoggedIn)
         {
-            SetState(PartyCoordinationState.Error, "Not logged in.");
+            SetState(PartyCoordinationState.Idle, "Not logged in.");
             return;
         }
 
@@ -72,7 +72,8 @@ public class PartyService : IDisposable
         var localPlayer = _objectTable.LocalPlayer;
         if (localPlayer == null)
         {
-            SetState(PartyCoordinationState.Error, "Local player not found.");
+            // During area transitions, local player can be temporarily null - don't error
+            SetState(PartyCoordinationState.Idle, "Loading...");
             return;
         }
 

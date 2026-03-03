@@ -113,8 +113,8 @@ public class MainWindow : Window, IDisposable
             var player = Plugin.ObjectTable.LocalPlayer;
             if (player != null)
             {
-                var playerName = KrangleService.KrangleName(player.Name.TextValue);
-                var serverName = KrangleService.KrangleServer(player.HomeWorld.Value.Name.ToString());
+                var playerName = plugin.Configuration.KrangleNames ? KrangleService.KrangleName(player.Name.TextValue) : player.Name.TextValue;
+                var serverName = plugin.Configuration.KrangleNames ? KrangleService.KrangleServer(player.HomeWorld.Value.Name.ToString()) : player.HomeWorld.Value.Name.ToString();
                 ImGui.SameLine();
                 ImGui.Text($"  |  {playerName} @ {serverName}");
             }
@@ -154,6 +154,15 @@ public class MainWindow : Window, IDisposable
         {
             plugin.ToggleConfigUi();
         }
+
+        ImGui.SameLine();
+        var krangleEnabled = plugin.Configuration.KrangleNames;
+        var krangleText = krangleEnabled ? "[Unkreangle]" : "[Krangle Names]";
+        if (ImGui.Button(krangleText, new Vector2(120, 0)))
+        {
+            plugin.Configuration.KrangleNames = !krangleEnabled;
+            plugin.Configuration.Save();
+        }
     }
 
     private void DrawMapInventorySection()
@@ -187,19 +196,23 @@ public class MainWindow : Window, IDisposable
                         if (string.IsNullOrEmpty(itemName))
                             itemName = $"Unknown Map (ID: {itemId})";
                         
-                        // Extract map level from item
-                        var itemLevel = item?.LevelItem.RowId ?? 0;
-                        
-                        // Determine map tier from name or item level
-                        var mapTier = GetMapTier(itemName, itemLevel);
+                        // Parse map tier and level from item description
+                        var desc = item?.Description.ToString() ?? "";
+                        var (mapTier, mapLevel) = ParseMapTierAndLevel(desc);
                         
                         ImGui.Text($"  {itemName}");
                         ImGui.SameLine();
                         ImGui.Text($" x{quantity}");
-                        ImGui.SameLine();
-                        ImGui.TextColored(ColorCyan, $"  Tier {mapTier}");
-                        ImGui.SameLine();
-                        ImGui.TextColored(ColorGrey, $"  (iLvl {itemLevel})");
+                        if (mapTier > 0)
+                        {
+                            ImGui.SameLine();
+                            ImGui.TextColored(ColorCyan, $"  Tier {mapTier}");
+                        }
+                        if (mapLevel > 0)
+                        {
+                            ImGui.SameLine();
+                            ImGui.TextColored(ColorGrey, $"  (Lvl {mapLevel})");
+                        }
                     }
                 }
 
@@ -287,7 +300,7 @@ public class MainWindow : Window, IDisposable
                 ImGui.Spacing();
                 foreach (var member in party.PartyMembers)
                 {
-                    var krangled = KrangleService.KrangleName(member.Name);
+                    var krangled = plugin.Configuration.KrangleNames ? KrangleService.KrangleName(member.Name) : member.Name;
                     ImGui.Text($"    {krangled}");
                     ImGui.SameLine();
                     if (member.IsMounted)
@@ -371,54 +384,37 @@ private void DrawDependencySection()
         }
     }
 
-    private static int GetMapTier(string mapName, uint itemLevel)
+    private static (int tier, int level) ParseMapTierAndLevel(string description)
     {
-        // Map name to tier lookup (ordered by expansion/release)
-        // Tier is based on the map's position in the progression
-        var tierMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            // ARR
-            { "Timeworn Leather Map", 1 },
-            { "Timeworn Goatskin Map", 2 },
-            { "Timeworn Toadskin Map", 3 },
-            { "Timeworn Boarskin Map", 4 },
-            { "Timeworn Peisteskin Map", 5 },
-            // HW
-            { "Timeworn Archaeoskin Map", 6 },
-            { "Timeworn Wyvernskin Map", 7 },
-            { "Timeworn Dragonskin Map", 8 },
-            // SB
-            { "Timeworn Gaganaskin Map", 9 },
-            { "Timeworn Gazelleskin Map", 10 },
-            // ShB
-            { "Timeworn Gliderskin Map", 11 },
-            { "Timeworn Zonureskin Map", 12 },
-            // EW
-            { "Timeworn Saigaskin Map", 13 },
-            { "Timeworn Kumbhiraskin Map", 14 },
-            // DT
-            { "Timeworn Loboskin Map", 15 },
-            { "Timeworn Br'aaxskin Map", 16 },
-            // Special maps
-            { "Timeworn Special Archaeoskin Map", 6 },
-            { "Timeworn Special Dragonskin Map", 8 },
-            { "Timeworn Special Gazelleskin Map", 10 },
-            { "Timeworn Special Zonureskin Map", 12 },
-            { "Timeworn Special Kumbhiraskin Map", 14 },
-            { "Timeworn Special Br'aaxskin Map", 16 },
-        };
+        int tier = 0;
+        int level = 0;
 
-        foreach (var kvp in tierMap)
+        if (string.IsNullOrEmpty(description))
+            return (tier, level);
+
+        // Parse "risk-reward grade X" for tier
+        var gradeIndex = description.IndexOf("risk-reward grade", StringComparison.OrdinalIgnoreCase);
+        if (gradeIndex >= 0)
         {
-            if (mapName.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                return kvp.Value;
+            var afterGrade = description.Substring(gradeIndex + "risk-reward grade".Length).Trim();
+            var gradeEnd = afterGrade.IndexOfAny(new[] { ' ', '.', ',', '\n' });
+            var gradeStr = gradeEnd > 0 ? afterGrade.Substring(0, gradeEnd) : afterGrade;
+            if (int.TryParse(gradeStr, out var parsedTier))
+                tier = parsedTier;
         }
 
-        // Fallback: estimate tier from item level
-        if (itemLevel > 0)
-            return Math.Max(1, (int)(itemLevel / 50) + 1);
+        // Parse "Level X" for map level
+        var levelIndex = description.IndexOf("Level", StringComparison.OrdinalIgnoreCase);
+        if (levelIndex >= 0)
+        {
+            var afterLevel = description.Substring(levelIndex + "Level".Length).Trim();
+            var levelEnd = afterLevel.IndexOfAny(new[] { ' ', '.', ',', '\n' });
+            var levelStr = levelEnd > 0 ? afterLevel.Substring(0, levelEnd) : afterLevel;
+            if (int.TryParse(levelStr, out var parsedLevel))
+                level = parsedLevel;
+        }
 
-        return 0;
+        return (tier, level);
     }
 
     private void DrawDebugLogSection()

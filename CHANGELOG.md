@@ -2,6 +2,16 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.3] - 2026-03-03
+
+### Added
+- **[Krangle Names] toggle button** - Click to toggle name obfuscation on/off for all player names
+
+### Fixed
+- **Map tier/level extraction** - Now parses from item description ("risk-reward grade X", "Level Y") instead of hardcoded lookup
+- **Map tier accuracy** - Br'aaxskin now correctly shows Tier 17, Level 100 (parsed from description)
+- **Party error on area change** - "Local player not found" changed to "Loading..." during zone transitions (not an error)
+
 ## [0.0.1.2] - 2026-03-03
 
 ### Added
