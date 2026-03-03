@@ -24,7 +24,7 @@ public class RotationPluginIPC : IDisposable
     {
         new RotationPluginInfo
         {
-            InternalName = "RotationSolverReborn",
+            InternalName = "RotationSolver",
             DisplayName = "RSR (RotationSolver Reborn)",
             HasTreasureMapSupport = false,
             Notes = "General combat rotation",

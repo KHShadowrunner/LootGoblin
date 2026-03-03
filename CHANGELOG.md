@@ -2,6 +2,11 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.0.9] - 2026-03-03
+
+### Fixed
+- **RSR detection** - Corrected InternalName from "RotationSolverReborn" to "RotationSolver" (RSR now detects properly)
+
 ## [0.0.0.8] - 2026-03-03
 
 ### Fixed
