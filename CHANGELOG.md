@@ -2,6 +2,12 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.4] - 2026-03-03
+
+### Fixed
+- **[Un-Krangle] button text** - Was incorrectly labelled "Unkreangle"
+- **Map tier for older maps** - Now searches for "grade X" broadly, catching "classified as grade X" (pre-DT format) so all map tiers display correctly
+
 ## [0.0.1.3] - 2026-03-03
 
 ### Added

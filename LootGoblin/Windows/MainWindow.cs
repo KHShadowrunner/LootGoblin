@@ -157,7 +157,7 @@ public class MainWindow : Window, IDisposable
 
         ImGui.SameLine();
         var krangleEnabled = plugin.Configuration.KrangleNames;
-        var krangleText = krangleEnabled ? "[Unkreangle]" : "[Krangle Names]";
+        var krangleText = krangleEnabled ? "[Un-Krangle]" : "[Krangle Names]";
         if (ImGui.Button(krangleText, new Vector2(120, 0)))
         {
             plugin.Configuration.KrangleNames = !krangleEnabled;
@@ -392,15 +392,22 @@ private void DrawDependencySection()
         if (string.IsNullOrEmpty(description))
             return (tier, level);
 
-        // Parse "risk-reward grade X" for tier
-        var gradeIndex = description.IndexOf("risk-reward grade", StringComparison.OrdinalIgnoreCase);
-        if (gradeIndex >= 0)
+        // Parse grade number - handles both "risk-reward grade X" (DT) and "classified as grade X" (older)
+        // Search for "grade " followed by a number
+        var searchFrom = 0;
+        while (searchFrom < description.Length)
         {
-            var afterGrade = description.Substring(gradeIndex + "risk-reward grade".Length).Trim();
-            var gradeEnd = afterGrade.IndexOfAny(new[] { ' ', '.', ',', '\n' });
+            var gradeIndex = description.IndexOf("grade ", searchFrom, StringComparison.OrdinalIgnoreCase);
+            if (gradeIndex < 0) break;
+            var afterGrade = description.Substring(gradeIndex + "grade ".Length).Trim();
+            var gradeEnd = afterGrade.IndexOfAny(new[] { ' ', '.', ',', '\n', '\r' });
             var gradeStr = gradeEnd > 0 ? afterGrade.Substring(0, gradeEnd) : afterGrade;
             if (int.TryParse(gradeStr, out var parsedTier))
+            {
                 tier = parsedTier;
+                break;
+            }
+            searchFrom = gradeIndex + 1;
         }
 
         // Parse "Level X" for map level
