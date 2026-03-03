@@ -69,6 +69,17 @@ public class RotationPluginIPC : IDisposable
         {
             var installedPlugins = _pluginInterface.InstalledPlugins;
 
+            // Debug: Log all installed plugin InternalNames
+            if (_plugin.Configuration.DebugMode)
+            {
+                _plugin.AddDebugLog("=== Installed Plugins ===");
+                foreach (var p in installedPlugins)
+                {
+                    if (p.IsLoaded)
+                        _plugin.AddDebugLog($"  {p.InternalName} (loaded)");
+                }
+            }
+
             foreach (var rp in RotationPlugins)
             {
                 rp.IsAvailable = false;
@@ -77,15 +88,15 @@ public class RotationPluginIPC : IDisposable
                     if (string.Equals(p.InternalName, rp.InternalName, StringComparison.OrdinalIgnoreCase) && p.IsLoaded)
                     {
                         rp.IsAvailable = true;
+                        _plugin.AddDebugLog($"{rp.DisplayName}: Available (matched '{p.InternalName}')");
                         break;
                     }
                 }
-            }
 
-            foreach (var rp in RotationPlugins)
-            {
-                if (rp.IsAvailable)
-                    _plugin.AddDebugLog($"{rp.DisplayName}: Available");
+                if (!rp.IsAvailable && _plugin.Configuration.DebugMode)
+                {
+                    _plugin.AddDebugLog($"{rp.DisplayName}: Not found (looking for '{rp.InternalName}')");
+                }
             }
         }
         catch (Exception ex)

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using LootGoblin.Models;
+using Lumina.Excel.Sheets;
 
 namespace LootGoblin.Services;
 
@@ -10,10 +10,12 @@ public class InventoryService : IDisposable
 {
     private readonly IPluginLog _log;
     private readonly Plugin _plugin;
+    private readonly IDataManager _dataManager;
 
-    public InventoryService(Plugin plugin, IPluginLog log)
+    public InventoryService(Plugin plugin, IDataManager dataManager, IPluginLog log)
     {
         _plugin = plugin;
+        _dataManager = dataManager;
         _log = log;
     }
 
@@ -32,20 +34,63 @@ public class InventoryService : IDisposable
                 return results;
             }
 
-            foreach (var itemId in TreasureMapData.AllMapItemIds)
+            var itemSheet = _dataManager.GetExcelSheet<Item>();
+            if (itemSheet == null)
             {
-                var count = manager->GetInventoryItemCount(itemId);
-                if (count > 0)
-                {
-                    results[itemId] = count;
+                _plugin.AddDebugLog("Item sheet is null.");
+                return results;
+            }
 
-                    if (TreasureMapData.KnownMaps.TryGetValue(itemId, out var info))
-                        _plugin.AddDebugLog($"Found {count}x {info.Name} (ID: {itemId})");
+            var containers = new[]
+            {
+                InventoryType.Inventory1,
+                InventoryType.Inventory2,
+                InventoryType.Inventory3,
+                InventoryType.Inventory4,
+            };
+
+            foreach (var containerType in containers)
+            {
+                var container = manager->GetInventoryContainer(containerType);
+                if (container == null) continue;
+
+                for (int i = 0; i < container->Size; i++)
+                {
+                    var slot = container->GetInventorySlot(i);
+                    if (slot == null || slot->ItemId == 0) continue;
+
+                    var item = itemSheet.GetRow(slot->ItemId);
+                    var itemName = item.Name.ToString();
+                    if (string.IsNullOrEmpty(itemName)) continue;
+
+                    // Pattern: "Timeworn * Map" or "* Special Timeworn Map"
+                    if (itemName.Contains("Timeworn") && itemName.Contains("Map"))
+                    {
+                        var itemId = slot->ItemId;
+                        var quantity = (int)slot->Quantity;
+
+                        if (results.ContainsKey(itemId))
+                            results[itemId] += quantity;
+                        else
+                            results[itemId] = quantity;
+                    }
                 }
             }
 
             if (results.Count == 0)
+            {
                 _plugin.AddDebugLog("No treasure maps found in inventory.");
+            }
+            else
+            {
+                foreach (var kvp in results)
+                {
+                    var item = itemSheet.GetRow(kvp.Key);
+                    var name = item.Name.ToString();
+                    if (string.IsNullOrEmpty(name)) name = "Unknown";
+                    _plugin.AddDebugLog($"Found {kvp.Value}x {name} (ID: {kvp.Key})");
+                }
+            }
         }
         catch (Exception ex)
         {

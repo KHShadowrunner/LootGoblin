@@ -2,6 +2,20 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.0.8] - 2026-03-03
+
+### Fixed
+- **Map inventory scanner** - Now uses name pattern matching ("Timeworn" + "Map") instead of hardcoded ItemId list
+- **Emergent map discovery** - Scanner will detect new maps added in future patches automatically
+- **IPC plugin detection** - Added debug logging to diagnose InternalName mismatches
+- **Lumina API compatibility** - Fixed Item sheet access (removed incorrect .Value/.HasValue usage)
+- **Refresh Dependencies button** - Now properly rechecks all plugin availability
+
+### Changed
+- InventoryService now iterates through inventory containers and checks item names from game data
+- All IPC checks now use case-insensitive string comparison
+- Debug mode shows full list of installed plugin InternalNames for troubleshooting
+
 ## [0.0.0.6] - 2026-03-03
 
 ### Added

@@ -29,16 +29,24 @@ public class GlobeTrotterIPC : IDisposable
         {
             var installedPlugins = _pluginInterface.InstalledPlugins;
             IsAvailable = false;
+            
             foreach (var p in installedPlugins)
             {
-                if (p.InternalName == "GlobeTrotter" && p.IsLoaded)
+                if (string.Equals(p.InternalName, "GlobeTrotter", StringComparison.OrdinalIgnoreCase) && p.IsLoaded)
                 {
                     IsAvailable = true;
+                    _plugin.AddDebugLog($"GlobeTrotter: Available (matched '{p.InternalName}')");
                     break;
                 }
             }
 
-            _plugin.AddDebugLog($"GlobeTrotter: {(IsAvailable ? "Available" : "Not found")}");
+            if (!IsAvailable)
+            {
+                if (_plugin.Configuration.DebugMode)
+                    _plugin.AddDebugLog("GlobeTrotter: Not found (looking for 'GlobeTrotter')");
+                else
+                    _plugin.AddDebugLog("GlobeTrotter: Not found");
+            }
         }
         catch (Exception ex)
         {

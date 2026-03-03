@@ -29,16 +29,24 @@ public class VNavIPC : IDisposable
         {
             var installedPlugins = _pluginInterface.InstalledPlugins;
             IsAvailable = false;
+            
             foreach (var p in installedPlugins)
             {
-                if (p.InternalName == "vnavmesh" && p.IsLoaded)
+                if (string.Equals(p.InternalName, "vnavmesh", StringComparison.OrdinalIgnoreCase) && p.IsLoaded)
                 {
                     IsAvailable = true;
+                    _plugin.AddDebugLog($"vnavmesh: Available (matched '{p.InternalName}')");
                     break;
                 }
             }
 
-            _plugin.AddDebugLog($"vnavmesh: {(IsAvailable ? "Available" : "Not found")}");
+            if (!IsAvailable)
+            {
+                if (_plugin.Configuration.DebugMode)
+                    _plugin.AddDebugLog("vnavmesh: Not found (looking for 'vnavmesh')");
+                else
+                    _plugin.AddDebugLog("vnavmesh: Not found");
+            }
         }
         catch (Exception ex)
         {

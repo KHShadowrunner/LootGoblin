@@ -157,25 +157,38 @@ public class MainWindow : Window, IDisposable
                 }
                 else
                 {
+                    var itemSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+                    
                     foreach (var kvp in cachedMaps)
                     {
-                        if (TreasureMapData.KnownMaps.TryGetValue(kvp.Key, out var info))
+                        var itemId = kvp.Key;
+                        var quantity = kvp.Value;
+                        
+                        var item = itemSheet?.GetRow(itemId);
+                        var itemName = item?.Name.ToString();
+                        if (string.IsNullOrEmpty(itemName))
+                            itemName = $"Unknown Map (ID: {itemId})";
+                        
+                        // Try to match known maps for metadata
+                        var tierColor = ColorYellow; // Default to solo
+                        string? metadata = null;
+                        
+                        if (TreasureMapData.KnownMaps.TryGetValue(itemId, out var info))
                         {
-                            var tierColor = info.Tier == MapTier.Party ? ColorCyan : ColorYellow;
-                            ImGui.TextColored(tierColor, $"  {info.Name}");
-                            ImGui.SameLine();
-                            ImGui.Text($" x{kvp.Value}");
-                            ImGui.SameLine();
-                            ImGui.TextColored(ColorGrey, $"  [{info.Expansion}] {info.Tier}");
+                            tierColor = info.Tier == MapTier.Party ? ColorCyan : ColorYellow;
+                            metadata = $"[{info.Expansion}] {info.Tier}";
                             if (info.HasDungeon)
-                            {
-                                ImGui.SameLine();
-                                ImGui.TextColored(ColorGreen, " (Dungeon)");
-                            }
+                                metadata += " (Dungeon)";
                         }
-                        else
+                        
+                        ImGui.TextColored(tierColor, $"  {itemName}");
+                        ImGui.SameLine();
+                        ImGui.Text($" x{quantity}");
+                        
+                        if (metadata != null)
                         {
-                            ImGui.Text($"  Unknown Map (ID: {kvp.Key}) x{kvp.Value}");
+                            ImGui.SameLine();
+                            ImGui.TextColored(ColorGrey, $"  {metadata}");
                         }
                     }
                 }
