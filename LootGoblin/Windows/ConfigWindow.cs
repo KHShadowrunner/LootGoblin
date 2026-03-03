@@ -133,5 +133,39 @@ public class ConfigWindow : Window, IDisposable
             configuration.PartyWaitTimeout = partyTimeout;
             configuration.Save();
         }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.Text("Bot Automation");
+        ImGui.Spacing();
+
+        var autoNext = configuration.AutoStartNextMap;
+        if (ImGui.Checkbox("Auto-Start Next Map", ref autoNext))
+        {
+            configuration.AutoStartNextMap = autoNext;
+            configuration.Save();
+        }
+
+        var stopOnError = configuration.StopOnError;
+        if (ImGui.Checkbox("Stop on Error", ref stopOnError))
+        {
+            configuration.StopOnError = stopOnError;
+            configuration.Save();
+        }
+
+        var stateLogging = configuration.EnableStateLogging;
+        if (ImGui.Checkbox("Enable State Logging", ref stateLogging))
+        {
+            configuration.EnableStateLogging = stateLogging;
+            configuration.Save();
+        }
+
+        var maxRetries = configuration.MaxRetries;
+        if (ImGui.SliderInt("Max Retries", ref maxRetries, 0, 10))
+        {
+            configuration.MaxRetries = maxRetries;
+            configuration.Save();
+        }
     }
 }

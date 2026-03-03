@@ -54,6 +54,11 @@ public class MainWindow : Window, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
 
+        DrawBotControlSection();
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
         DrawMapInventorySection();
         ImGui.Spacing();
         ImGui.Separator();
@@ -227,6 +232,96 @@ public class MainWindow : Window, IDisposable
             else
             {
                 ImGui.TextColored(ColorGrey, "  Log in to scan inventory.");
+            }
+        }
+    }
+
+    private void DrawBotControlSection()
+    {
+        if (ImGui.CollapsingHeader("Bot Control", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            if (!Plugin.ClientState.IsLoggedIn)
+            {
+                ImGui.TextColored(ColorGrey, "  Log in to control the bot.");
+                return;
+            }
+
+            var sm = plugin.StateManager;
+
+            // State display
+            ImGui.Text("  State: ");
+            ImGui.SameLine();
+            var stateColor = sm.State == BotState.Error ? ColorRed :
+                             sm.State == BotState.Idle ? ColorGrey :
+                             sm.State == BotState.Completed ? ColorGreen : ColorCyan;
+            ImGui.TextColored(stateColor, sm.State.ToString());
+
+            if (sm.IsPaused)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(ColorYellow, " [PAUSED]");
+            }
+
+            if (!string.IsNullOrEmpty(sm.StateDetail))
+            {
+                ImGui.Text("  ");
+                ImGui.SameLine();
+                ImGui.TextColored(ColorGrey, sm.StateDetail);
+            }
+
+            if (sm.RetryCount > 0)
+            {
+                ImGui.Text("  ");
+                ImGui.SameLine();
+                ImGui.TextColored(ColorYellow, $"Retries: {sm.RetryCount}/{plugin.Configuration.MaxRetries}");
+            }
+
+            ImGui.Spacing();
+
+            // Control buttons
+            if (sm.State == BotState.Idle || sm.State == BotState.Error)
+            {
+                if (ImGui.Button("Start Bot", new Vector2(120, 0)))
+                {
+                    plugin.Configuration.Enabled = true;
+                    plugin.Configuration.Save();
+                    sm.Start();
+                }
+            }
+            else if (sm.IsPaused)
+            {
+                if (ImGui.Button("Resume", new Vector2(120, 0)))
+                    sm.Resume();
+                ImGui.SameLine();
+                if (ImGui.Button("Stop", new Vector2(120, 0)))
+                    sm.Stop();
+            }
+            else
+            {
+                if (ImGui.Button("Pause", new Vector2(120, 0)))
+                    sm.Pause();
+                ImGui.SameLine();
+                if (ImGui.Button("Stop", new Vector2(120, 0)))
+                    sm.Stop();
+            }
+
+            // Current map info
+            if (sm.SelectedMapItemId > 0)
+            {
+                ImGui.Spacing();
+                var item = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>()?.GetRow(sm.SelectedMapItemId);
+                var mapName = item?.Name.ToString() ?? $"ID {sm.SelectedMapItemId}";
+                ImGui.Text("  Map: ");
+                ImGui.SameLine();
+                ImGui.TextColored(ColorCyan, mapName);
+            }
+
+            // Location info
+            if (sm.CurrentLocation != null)
+            {
+                ImGui.Text("  Zone: ");
+                ImGui.SameLine();
+                ImGui.TextColored(ColorCyan, sm.CurrentLocation.ZoneName);
             }
         }
     }

@@ -25,6 +25,12 @@ public class Configuration : IPluginConfiguration
     public bool AllowPillionRiders { get; set; } = true;
     public int PartyWaitTimeout { get; set; } = 60;
 
+    // Phase 5: State Machine
+    public bool AutoStartNextMap { get; set; } = false;
+    public int MaxRetries { get; set; } = 3;
+    public bool StopOnError { get; set; } = true;
+    public bool EnableStateLogging { get; set; } = true;
+
     public void Save()
     {
         Plugin.PluginInterface.SavePluginConfig(this);

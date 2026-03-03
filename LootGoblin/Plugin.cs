@@ -18,12 +18,12 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
-    [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
 
     private const string CommandName = "/lootgoblin";
     private const string CommandAlias = "/lg";
@@ -39,6 +39,7 @@ public sealed class Plugin : IDalamudPlugin
     public MapDetectionService MapDetectionService { get; init; }
     public NavigationService NavigationService { get; init; }
     public PartyService PartyService { get; init; }
+    public StateManager StateManager { get; init; }
 
     // IPC
     public GlobeTrotterIPC GlobeTrotterIPC { get; init; }
@@ -66,6 +67,9 @@ public sealed class Plugin : IDalamudPlugin
 
         // Initialize party service
         PartyService = new PartyService(this, PartyList, ObjectTable, ClientState, Condition, Log);
+
+        // Initialize state machine
+        StateManager = new StateManager(this, Framework, Log);
 
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
@@ -102,6 +106,7 @@ public sealed class Plugin : IDalamudPlugin
         ConfigWindow.Dispose();
         MainWindow.Dispose();
 
+        StateManager.Dispose();
         PartyService.Dispose();
         NavigationService.Dispose();
         RotationPluginIPC.Dispose();

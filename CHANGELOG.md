@@ -2,6 +2,21 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.5] - 2026-03-03
+
+### Added - Phase 5: State Machine & Bot Logic
+- **StateManager** - Framework.Update-driven state machine (0.5s tick) with full workflow
+- **BotState machine** - States: Idle → SelectingMap → OpeningMap → DetectingLocation → Teleporting → Mounting → WaitingForParty → Flying → OpeningChest → InCombat → InDungeon → Completed → Idle
+- **Bot Control UI** - New "Bot Control" section in MainWindow with Start/Stop/Pause buttons, state + detail display, retry counter, current map and zone info
+- **State logging** - Configurable per-transition debug log entries
+- **Auto-start next map** - Optional: automatically run next map from inventory on completion
+- **Retry logic** - Configurable max retries (0-10) on error before stopping
+- **Config settings** - AutoStartNextMap, MaxRetries, StopOnError, EnableStateLogging in Bot Automation section
+
+### Notes
+- OpeningMap, DetectingLocation, OpeningChest are stubs pending Phase 6 (GlobeTrotter IPC + chest interaction)
+- InDungeon is a stub pending Phase 8
+
 ## [0.0.1.4] - 2026-03-03
 
 ### Fixed
