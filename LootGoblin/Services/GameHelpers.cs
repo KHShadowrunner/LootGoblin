@@ -49,7 +49,7 @@ public static class GameHelpers
             }
 
             // Use /gaction decipher to open the map selection menu
-            Plugin.CommandManager.ProcessCommand("/gaction decipher");
+            CommandHelper.SendCommand("/gaction decipher");
             Plugin.Log.Information($"UseItem({itemId}): Opened decipher menu for {count} maps");
             
             // TODO: Add menu callback to select the correct map by index

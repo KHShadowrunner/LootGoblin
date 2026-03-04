@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.11] - 2026-03-03
+
+### Fixed - Critical Hotfix v5
+- **Map decipher** - Use `CommandHelper.SendCommand` instead of `CommandManager.ProcessCommand`
+- Follows FrenRider/HFH pattern: `UIModule.ProcessChatBoxEntry` for game commands
+- v0.0.1.10 didn't actually send the command to the game client
+- Now `/gaction decipher` should properly open the map selection menu
+
 ## [0.0.1.10] - 2026-03-03
 
 ### Fixed - Critical Hotfix v4
