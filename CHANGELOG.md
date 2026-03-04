@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.9] - 2026-03-03
+
+### Fixed - Critical Hotfix v3
+- **Map decipher** - Proper context menu approach: `OpenForItemSlot` + `UseItem` with container/slot parameters
+- v0.0.1.8 returned success but didn't actually use the map in-game
+- Now finds item in inventory, opens context menu for that slot, then triggers Use action
+- This simulates the right-click → Use interaction that treasure maps require
+
 ## [0.0.1.8] - 2026-03-03
 
 ### Fixed - Critical Hotfix v2
