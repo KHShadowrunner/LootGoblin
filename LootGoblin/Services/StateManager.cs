@@ -171,14 +171,7 @@ public class StateManager : IDisposable
             return;
         }
 
-        // Sort by TreasureMapData MinLevel ascending (lowest tier first)
-        candidates.Sort((a, b) =>
-        {
-            var aLevel = TreasureMapData.KnownMaps.TryGetValue(a, out var ai) ? ai.MinLevel : 999;
-            var bLevel = TreasureMapData.KnownMaps.TryGetValue(b, out var bi) ? bi.MinLevel : 999;
-            return aLevel.CompareTo(bLevel);
-        });
-
+        // Don't sort - use inventory order to match menu order
         SelectedMapItemId = candidates[0];
         var mapName = TreasureMapData.KnownMaps.TryGetValue(SelectedMapItemId, out var info) ? info.Name : $"ID {SelectedMapItemId}";
         _plugin.AddDebugLog($"Selected: {mapName} (ID {SelectedMapItemId}).");

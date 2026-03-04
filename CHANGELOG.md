@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.34] - 2026-03-04
+
+### Fixed - Use inventory order (no sorting) for correct index
+- **Removed sorting** - Don't sort maps in StateManager selection
+- **Inventory order** - Use natural inventory scan order for menu index
+- **Correct index** - Now matches what user sees in /lg window
+- **Simple solution** - No complex sorting, just use inventory order
+
 ## [0.0.1.33] - 2026-03-03
 
 ### Fixed - Add 1 for 1-based indexing in callback

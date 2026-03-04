@@ -60,18 +60,18 @@ public static class GameHelpers
             CommandHelper.SendCommand("/gaction decipher");
             Plugin.Log.Information($"UseItem({itemId}): Opened decipher menu for {count} maps");
             
-            // Find the map's index in the menu by getting all maps and sorting by item ID
-            // The menu sorts maps by item ID ascending
+            // Find the map's index in the menu using inventory order (no sorting)
+            // The menu shows maps in the same order as inventory scan
             var allMaps = inventoryService.ScanForMaps();
-            var sortedMapIds = allMaps.Keys.OrderBy(id => id).ToList();
-            var mapIndex = sortedMapIds.IndexOf(itemId);
+            var mapIds = allMaps.Keys.ToList();
+            var mapIndex = mapIds.IndexOf(itemId);
             
-            Plugin.Log.Information($"UseItem({itemId}): All maps in inventory: {string.Join(", ", sortedMapIds)}");
+            Plugin.Log.Information($"UseItem({itemId}): All maps in inventory order: {string.Join(", ", mapIds)}");
             Plugin.Log.Information($"UseItem({itemId}): Target map {itemId} is at menu index {mapIndex}");
             
             if (mapIndex < 0)
             {
-                Plugin.Log.Error($"UseItem({itemId}): Could not find map in sorted list");
+                Plugin.Log.Error($"UseItem({itemId}): Could not find map in inventory list");
                 return false;
             }
             
