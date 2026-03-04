@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.24] - 2026-03-03
+
+### Fixed - Use raw AtkUnitBase.FireCallback with manual AtkValue construction
+- **Raw callback** - Direct `AtkUnitBase.FireCallback(2, atkValues)` call
+- **Manual AtkValue** - Construct AtkValue array with Bool and Int types
+- **Matches /callback** - Same pattern as `/callback SelectIconString true 4`
+- **Detailed logging** - Stack traces and inner exceptions for debugging
+- **2 parameters** - Bool (true) and Int (mapIndex) as shown in user's callback examples
+
 ## [0.0.1.23] - 2026-03-03
 
 ### Fixed - Use direct Callback.Fire for addon interaction

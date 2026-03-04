@@ -203,16 +203,24 @@ public static class GameHelpers
 
         Plugin.Log.Information($"[CALLBACK] Addon is visible, creating AddonMaster...");
 
-        // Try direct addon interaction instead of AddonMaster
-        Plugin.Log.Information($"[CALLBACK] Trying direct addon interaction for index {mapIndex}");
+        // Both Callback.Fire and AddonMaster are failing with null reference
+        // Let's get detailed error info and try raw AtkUnitBase callback
+        Plugin.Log.Information($"[CALLBACK] Addon AtkValuesCount={addon->AtkUnitBase.AtkValuesCount}");
+        Plugin.Log.Information($"[CALLBACK] Attempting raw callback with 2 params: true, {mapIndex}");
         
         try
         {
-            // Use ECommons Callback.Fire directly with the addon
-            // This is how SND actually does it - direct callback fire
-            Plugin.Log.Information($"[CALLBACK] Using Callback.Fire with index {mapIndex}");
-            Callback.Fire(&addon->AtkUnitBase, true, (uint)mapIndex);
-            Plugin.Log.Information($"[CALLBACK] Callback.Fire completed for index {mapIndex}");
+            // Try the most basic callback approach - 2 parameters like the /callback command showed
+            // /callback SelectIconString true 4
+            var atkValues = stackalloc AtkValue[2];
+            atkValues[0].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Bool;
+            atkValues[0].Byte = 1; // true
+            atkValues[1].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+            atkValues[1].Int = mapIndex;
+            
+            Plugin.Log.Information($"[CALLBACK] Calling FireCallback with 2 AtkValues");
+            addon->AtkUnitBase.FireCallback(2, atkValues);
+            Plugin.Log.Information($"[CALLBACK] FireCallback completed successfully");
 
             // Wait for the confirmation dialog, then click OK
             Plugin.Log.Information($"[CALLBACK] Waiting 500ms for confirmation dialog...");
@@ -223,32 +231,11 @@ public static class GameHelpers
         }
         catch (Exception ex)
         {
-            Plugin.Log.Error($"[CALLBACK] Direct callback failed: {ex.Message}");
-            
-            // Fallback: try AddonMaster if direct callback fails
-            Plugin.Log.Information($"[CALLBACK] Trying AddonMaster fallback...");
-            try
+            Plugin.Log.Error($"[CALLBACK] Raw callback failed: {ex.Message}");
+            Plugin.Log.Error($"[CALLBACK] Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
             {
-                var addonMaster = new AddonMaster.SelectIconString(&addon->AtkUnitBase);
-                Plugin.Log.Information($"[CALLBACK] AddonMaster created, EntryCount={addonMaster.EntryCount}");
-                
-                if (mapIndex < addonMaster.EntryCount)
-                {
-                    addonMaster.Entries[mapIndex].Select();
-                    Plugin.Log.Information($"[CALLBACK] AddonMaster selection successful");
-                    
-                    System.Threading.Tasks.Task.Delay(500).ContinueWith(_ => {
-                        TriggerConfirmDialog();
-                    });
-                }
-                else
-                {
-                    Plugin.Log.Error($"[CALLBACK] Index {mapIndex} out of range for AddonMaster");
-                }
-            }
-            catch (Exception ex2)
-            {
-                Plugin.Log.Error($"[CALLBACK] AddonMaster fallback also failed: {ex2.Message}");
+                Plugin.Log.Error($"[CALLBACK] Inner exception: {ex.InnerException.Message}");
             }
         }
     }
