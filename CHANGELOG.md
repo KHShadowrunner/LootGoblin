@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.43] - 2026-03-04
+
+### Fixed - Simplified chest interaction flow
+- **Simple chest targeting** - Just find chest and interact, nothing complex
+- **First interaction** - Triggers combat (no async delays, no state transitions)
+- **Second interaction** - After combat ends, interact with chest again
+- **Clear flow** - Chest → Combat → Chest → Portal/Complete
+- **No remounting** - Bot stays focused on chest interaction
+
 ## [0.0.1.42] - 2026-03-04
 
 ### Fixed - Chest interaction and combat flow

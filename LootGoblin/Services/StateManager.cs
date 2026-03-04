@@ -431,48 +431,30 @@ public class StateManager : IDisposable
             return;
         }
 
-        // In range - interact with chest
+        // In range - stop navigation and interact with chest
         _plugin.NavigationService.StopNavigation();
         
-        // Check if we're in combat - if so, wait for combat to end
-        if (_plugin.NavigationService.IsInCombat())
+        // Try to interact with chest - this should trigger combat
+        if (!stateActionIssued)
         {
-            TransitionTo(BotState.InCombat, "Combat started - waiting for it to end...");
-            return;
-        }
-        
-        // Check if we're returning from combat (stateActionIssued is true from previous interaction)
-        if (stateActionIssued)
-        {
-            _plugin.AddDebugLog("Post-combat - checking chest for portal...");
-            CheckForPortalAfterChest();
-            return;
-        }
-        
-        // Try to interact with chest (initial interaction to trigger combat)
-        var interacted = GameHelpers.InteractWithObject(chest);
-        if (interacted)
-        {
-            _plugin.AddDebugLog($"Interacted with coffer '{chest.Name.TextValue}' - waiting for combat...");
-            stateActionIssued = true;
+            _plugin.AddDebugLog($"In range of '{chest.Name.TextValue}' - attempting to interact...");
+            var interacted = GameHelpers.InteractWithObject(chest);
             
-            // Wait a moment to see if combat starts
-            System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => {
-                if (_plugin.NavigationService.IsInCombat())
-                {
-                    TransitionTo(BotState.InCombat, "Combat started - BMR AI enabled");
-                }
-                else
-                {
-                    // No combat, check for portal immediately
-                    _plugin.AddDebugLog("No combat triggered - checking for portal...");
-                    CheckForPortalAfterChest();
-                }
-            });
+            if (interacted)
+            {
+                _plugin.AddDebugLog($"Successfully interacted with '{chest.Name.TextValue}'");
+                stateActionIssued = true;
+                StateDetail = "Chest interacted - waiting for combat to start...";
+            }
+            else
+            {
+                _plugin.AddDebugLog($"Failed to interact with '{chest.Name.TextValue}' - will retry");
+                stateActionIssued = false; // Allow retry
+            }
         }
         else
         {
-            _plugin.AddDebugLog("InteractWithObject returned false, will retry next tick.");
+            StateDetail = $"Waiting near '{chest.Name.TextValue}' for combat to start...";
         }
     }
 
@@ -551,16 +533,51 @@ public class StateManager : IDisposable
             return;
         }
         
-        // Combat ended - wait 5-8 seconds then check chest again
+        // Combat ended - wait 5-8 seconds then interact with chest again
         var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
         if (elapsed < 6)
         {
-            StateDetail = $"Combat ended - waiting before chest check... ({elapsed:F0}/6s)";
+            StateDetail = $"Combat ended - waiting before 2nd chest interaction... ({elapsed:F0}/6s)";
             return;
         }
         
-        // Time to check chest for portal
-        TransitionTo(BotState.OpeningChest, "Combat ended - checking chest for portal...");
+        // Time to interact with chest again (post-combat)
+        _plugin.AddDebugLog("Combat ended - attempting 2nd chest interaction...");
+        var chest = _plugin.ChestDetectionService.FindNearestCoffer();
+        
+        if (chest != null)
+        {
+            var dist = _plugin.ChestDetectionService.NearestCofferDistance;
+            if (dist <= _plugin.Configuration.ChestInteractionRange)
+            {
+                // Try to interact with chest again
+                var interacted = GameHelpers.InteractWithObject(chest);
+                if (interacted)
+                {
+                    _plugin.AddDebugLog($"2nd interaction with '{chest.Name.TextValue}' successful - checking for portal...");
+                    
+                    // Wait a moment then check for portal
+                    System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => {
+                        CheckForPortalAfterChest();
+                    });
+                }
+                else
+                {
+                    _plugin.AddDebugLog("2nd chest interaction failed - checking for portal anyway...");
+                    CheckForPortalAfterChest();
+                }
+            }
+            else
+            {
+                _plugin.AddDebugLog($"Chest too far for 2nd interaction ({dist:F1}y) - checking for portal...");
+                CheckForPortalAfterChest();
+            }
+        }
+        else
+        {
+            _plugin.AddDebugLog("No chest found for 2nd interaction - checking for portal...");
+            CheckForPortalAfterChest();
+        }
     }
 
     private void TickInDungeon()
