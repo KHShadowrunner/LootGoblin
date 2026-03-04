@@ -87,59 +87,65 @@ public static class GameHelpers
     }
 
     /// <summary>
-    /// Find the index of a specific map in the decipher menu.
-    /// Maps appear in inventory order (Inventory1-4, slot order).
+    /// Find the index of a specific map in the decipher menu by reading the SelectIconString addon.
+    /// The menu order does NOT match inventory order - it's sorted by the game.
     /// </summary>
     private static unsafe int FindMapIndexInMenu(uint targetItemId)
     {
-        Plugin.Log.Information($"[FIND] Looking for map ID {targetItemId} in decipher menu");
+        Plugin.Log.Information($"[FIND] Looking for map ID {targetItemId} in SelectIconString addon");
         
         try
         {
-            var index = 0;
-            var im = InventoryManager.Instance();
-            if (im == null)
+            // Wait a bit for the addon to populate
+            System.Threading.Thread.Sleep(100);
+            
+            // Get the SelectIconString addon
+            nint addonPtr = Plugin.GameGui.GetAddonByName("SelectIconString", 1);
+            if (addonPtr == 0)
             {
-                Plugin.Log.Error("[FIND] InventoryManager.Instance() is null");
+                Plugin.Log.Error("[FIND] SelectIconString addon not found");
                 return -1;
             }
 
-            // Search inventory in the same order the menu displays
-            var containers = new[] {
-                InventoryType.Inventory1, InventoryType.Inventory2,
-                InventoryType.Inventory3, InventoryType.Inventory4
-            };
-
-            foreach (var container in containers)
+            var addon = (AddonSelectIconString*)addonPtr;
+            if (!addon->AtkUnitBase.IsVisible)
             {
-                var inv = im->GetInventoryContainer(container);
-                if (inv == null) continue;
+                Plugin.Log.Error("[FIND] SelectIconString addon not visible");
+                return -1;
+            }
 
-                for (var i = 0; i < inv->Size; i++)
+            Plugin.Log.Information($"[FIND] SelectIconString has {addon->AtkUnitBase.AtkValuesCount} values");
+
+            // The addon stores item IDs in AtkValues
+            // Format: pairs of (itemId, quantity) for each entry
+            var entryCount = addon->AtkUnitBase.AtkValuesCount / 2;
+            Plugin.Log.Information($"[FIND] Calculated {entryCount} menu entries");
+
+            for (int i = 0; i < entryCount; i++)
+            {
+                var valueIndex = i * 2;
+                if (valueIndex >= addon->AtkUnitBase.AtkValuesCount) break;
+
+                var atkValue = addon->AtkUnitBase.AtkValues[valueIndex];
+                if (atkValue.Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int)
                 {
-                    var slot = im->GetInventorySlot(container, i);
-                    if (slot == null || slot->ItemId == 0) continue;
-
-                    // Check if this is a treasure map
-                    if (IsTreasureMap(slot->ItemId))
+                    var itemId = (uint)atkValue.Int;
+                    Plugin.Log.Information($"[FIND] Menu index {i}: Item ID {itemId}");
+                    
+                    if (itemId == targetItemId)
                     {
-                        Plugin.Log.Information($"[FIND] Found map ID {slot->ItemId} at {container}:{i}, current index={index}");
-                        if (slot->ItemId == targetItemId)
-                        {
-                            Plugin.Log.Information($"[FIND] Found target map ID {targetItemId} at index {index}");
-                            return index; // Found our map
-                        }
-                        index++; // Increment for each map in menu
+                        Plugin.Log.Information($"[FIND] Found target map ID {targetItemId} at menu index {i}");
+                        return i;
                     }
                 }
             }
 
-            Plugin.Log.Warning($"[FIND] Target map ID {targetItemId} not found in menu (total maps: {index})");
-            return -1; // Not found
+            Plugin.Log.Warning($"[FIND] Target map ID {targetItemId} not found in menu");
+            return -1;
         }
         catch (Exception ex)
         {
-            Plugin.Log.Error($"[FIND] FindMapIndexInMenu failed: {ex.Message}");
+            Plugin.Log.Error($"[FIND] FindMapIndexInMenu failed: {ex.Message}\n{ex.StackTrace}");
             return -1;
         }
     }

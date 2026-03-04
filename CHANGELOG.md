@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.27] - 2026-03-03
+
+### Fixed - Read menu order directly from SelectIconString addon
+- **Critical fix** - Menu order does NOT match inventory order
+- **Read addon** - Parse SelectIconString AtkValues to find actual menu positions
+- **Correct index** - Now finds the map's true position in the sorted menu
+- **Item IDs** - Reads item IDs from addon values instead of guessing from inventory
+
 ## [0.0.1.26] - 2026-03-03
 
 ### Fixed - Revert to 0-based indexing for SelectIconString callback
