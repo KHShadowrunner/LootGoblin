@@ -2,6 +2,18 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.10] - 2026-03-03
+
+### Fixed - Critical Hotfix v4
+- **Duplicate Start buttons** - Removed duplicate "Enable Bot" button from Controls section, keep only "Start Bot" in Bot Control
+- **Map decipher** - Switch to `/gaction decipher` command which opens the map selection menu
+- Previous attempts failed:
+  - v0.0.1.9: Context menu approach returned success but didn't actually decipher
+  - v0.0.1.8: AgentInventoryContext.UseItem(itemId) returned success but no action
+  - v0.0.1.7: /item command doesn't exist
+  - v0.0.1.6: ActionManager.UseAction doesn't support treasure maps
+- Current implementation opens decipher menu; TODO: Add menu callback to auto-select correct map
+
 ## [0.0.1.9] - 2026-03-03
 
 ### Fixed - Critical Hotfix v3

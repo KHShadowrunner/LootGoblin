@@ -133,28 +133,6 @@ public class MainWindow : Window, IDisposable
 
     private void DrawControlsSection()
     {
-        var enabled = plugin.Configuration.Enabled;
-
-        if (enabled)
-        {
-            if (ImGui.Button("Disable Bot", new Vector2(120, 0)))
-            {
-                plugin.Configuration.Enabled = false;
-                plugin.Configuration.Save();
-                plugin.AddDebugLog("Bot disabled via UI.");
-            }
-        }
-        else
-        {
-            if (ImGui.Button("Enable Bot", new Vector2(120, 0)))
-            {
-                plugin.Configuration.Enabled = true;
-                plugin.Configuration.Save();
-                plugin.AddDebugLog("Bot enabled via UI.");
-            }
-        }
-
-        ImGui.SameLine();
         if (ImGui.Button("Settings", new Vector2(120, 0)))
         {
             plugin.ToggleConfigUi();
