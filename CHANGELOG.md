@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.15] - 2026-03-03
+
+### Fixed - Add ECommons dependency for AddonMaster
+- **Dependencies** - Added ECommons package for AddonMaster implementations
+- **Map decipher** - Back to manual selection while investigating AddonMaster.SelectIconString API
+- Previous v0.0.1.14 attempted AddonMaster but API methods need investigation
+- Menu opens correctly with `/gaction decipher` using CommandHelper.SendCommand
+
 ## [0.0.1.14] - 2026-03-03
 
 ### Fixed - Version bump for testing
