@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -28,7 +29,7 @@ public class ChestDetectionService : IDisposable
 
     /// <summary>
     /// Scan the ObjectTable for the nearest treasure coffer.
-    /// Searches for EventObj objects with names containing "Treasure" or "Coffer".
+    /// Uses FrenRider-style simple targeting: look for exact name "Treasure Coffer".
     /// Returns the nearest one within maxRange (default 100 yalms).
     /// </summary>
     public IGameObject? FindNearestCoffer(float maxRange = 100f)
@@ -46,23 +47,17 @@ public class ChestDetectionService : IDisposable
 
         try
         {
-            foreach (var obj in Plugin.ObjectTable)
+            // FrenRider-style: simple exact name match
+            var chestObj = Plugin.ObjectTable.FirstOrDefault(obj => 
+                obj != null && obj.Name.ToString() == "Treasure Coffer");
+            
+            if (chestObj != null)
             {
-                if (obj == null) continue;
-                if (obj.ObjectKind != ObjectKind.EventObj) continue;
-
-                var name = obj.Name.TextValue;
-                if (string.IsNullOrEmpty(name)) continue;
-
-                if (!name.Contains("Treasure", StringComparison.OrdinalIgnoreCase) &&
-                    !name.Contains("Coffer", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var dist = Vector3.Distance(player.Position, obj.Position);
-                if (dist < nearestDist && dist <= maxRange)
+                var dist = Vector3.Distance(player.Position, chestObj.Position);
+                if (dist <= maxRange)
                 {
+                    nearest = chestObj;
                     nearestDist = dist;
-                    nearest = obj;
                 }
             }
         }
@@ -76,6 +71,13 @@ public class ChestDetectionService : IDisposable
 
         if (nearest != null)
             _plugin.AddDebugLog($"Coffer found: '{nearest.Name.TextValue}' at {nearest.Position} ({nearestDist:F1}y away)");
+        else
+        {
+            // Fallback: try /target command approach
+            _plugin.AddDebugLog("No chest found via ObjectTable - trying /target command...");
+            // Note: We could send CommandHelper.SendCommand("/target \"Treasure Coffer\"") here
+            // but that would make the player target it, not return the object reference
+        }
 
         return nearest;
     }

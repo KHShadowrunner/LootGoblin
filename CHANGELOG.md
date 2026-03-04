@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.47] - 2026-03-04
+
+### Fixed - Chest detection using FrenRider pattern
+- **Replaced complex ObjectTable scan** - Was filtering by ObjectKind + partial name matches
+- **Now uses FrenRider-style** - Simple exact name match: `ObjectTable.FirstOrDefault(obj => obj.Name.ToString() == "Treasure Coffer")`
+- **Added fallback targeting** - If ObjectTable fails, tries `/target "Treasure Coffer"` every 10s
+- **Simplified chest detection** - Much more reliable, matches proven FrenRider targeting method
+
 ## [0.0.1.46] - 2026-03-04
 
 ### Fixed - Combat detection was blocking chest search

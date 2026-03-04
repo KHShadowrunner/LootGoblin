@@ -421,6 +421,13 @@ public class StateManager : IDisposable
             if ((int)elapsed % 5 == 0 && (int)elapsed > 0)
                 _plugin.AddDebugLog($"[OpeningChest] No coffer found yet ({elapsed:F0}s)");
             
+            // Fallback: try targeting via command if ObjectTable fails
+            if ((int)elapsed % 10 == 0 && (int)elapsed > 0)
+            {
+                _plugin.AddDebugLog("[OpeningChest] Trying /target \"Treasure Coffer\" as fallback...");
+                CommandHelper.SendCommand("/target \"Treasure Coffer\"");
+            }
+            
             // Check if combat started without chest (e.g., from /gaction dig)
             if (_plugin.NavigationService.IsInCombat())
             {
