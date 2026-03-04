@@ -116,26 +116,32 @@ public static class GameHelpers
 
             Plugin.Log.Information($"[FIND] SelectIconString has {addon->AtkUnitBase.AtkValuesCount} values");
 
-            // The addon stores item IDs in AtkValues
-            // Format: pairs of (itemId, quantity) for each entry
-            var entryCount = addon->AtkUnitBase.AtkValuesCount / 2;
-            Plugin.Log.Information($"[FIND] Calculated {entryCount} menu entries");
-
-            for (int i = 0; i < entryCount; i++)
+            // Debug: log all AtkValues to understand the format
+            for (int i = 0; i < addon->AtkUnitBase.AtkValuesCount; i++)
             {
-                var valueIndex = i * 2;
-                if (valueIndex >= addon->AtkUnitBase.AtkValuesCount) break;
+                var atkValue = addon->AtkUnitBase.AtkValues[i];
+                Plugin.Log.Information($"[FIND] AtkValue[{i}]: Type={atkValue.Type}, Int={atkValue.Int}, UInt={atkValue.UInt}");
+            }
 
-                var atkValue = addon->AtkUnitBase.AtkValues[valueIndex];
-                if (atkValue.Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int)
+            // Try to find the target item ID in the values
+            // The format might be: [string, icon, itemId] repeating, or some other pattern
+            for (int i = 0; i < addon->AtkUnitBase.AtkValuesCount; i++)
+            {
+                var atkValue = addon->AtkUnitBase.AtkValues[i];
+                if (atkValue.Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int ||
+                    atkValue.Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.UInt)
                 {
-                    var itemId = (uint)atkValue.Int;
-                    Plugin.Log.Information($"[FIND] Menu index {i}: Item ID {itemId}");
+                    var itemId = atkValue.Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int 
+                        ? (uint)atkValue.Int 
+                        : atkValue.UInt;
                     
                     if (itemId == targetItemId)
                     {
-                        Plugin.Log.Information($"[FIND] Found target map ID {targetItemId} at menu index {i}");
-                        return i;
+                        // Try to determine which menu index this corresponds to
+                        // Assuming pattern repeats every N values
+                        var menuIndex = i / 3; // Guess based on your log showing indices 3, 6, 9
+                        Plugin.Log.Information($"[FIND] Found target map ID {targetItemId} at AtkValue[{i}], guessing menu index {menuIndex}");
+                        return menuIndex;
                     }
                 }
             }

@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.28] - 2026-03-03
+
+### Debug - Log all AtkValues to understand SelectIconString format
+- **Full debug** - Log every AtkValue with type and value
+- **Pattern detection** - Identify the actual data structure used by the addon
+- **Find item IDs** - Search all values for the target map ID
+- **Adaptive parsing** - Calculate menu index based on discovered pattern
+
 ## [0.0.1.27] - 2026-03-03
 
 ### Fixed - Read menu order directly from SelectIconString addon
