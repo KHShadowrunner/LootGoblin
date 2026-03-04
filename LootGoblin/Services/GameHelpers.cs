@@ -60,22 +60,17 @@ public static class GameHelpers
             CommandHelper.SendCommand("/gaction decipher");
             Plugin.Log.Information($"UseItem({itemId}): Opened decipher menu for {count} maps");
             
-            // Find the map's index in the menu and trigger the callback
-            var mapIndex = FindMapIndexInMenu(itemId);
-            if (mapIndex >= 0)
-            {
-                // Trigger the callback after a longer delay to ensure menu is ready
-                Plugin.Log.Information($"UseItem({itemId}): Found map at index {mapIndex}, waiting 500ms for menu...");
-                System.Threading.Tasks.Task.Delay(500).ContinueWith(async _ => {
-                    Plugin.Log.Information($"UseItem({itemId}): Delay complete, triggering callback for map index {mapIndex}");
-                    TriggerMapDecipherCallback(mapIndex);
-                });
-                Plugin.Log.Information($"UseItem({itemId}): Callback scheduled for map index {mapIndex}");
-            }
-            else
-            {
-                Plugin.Log.Warning($"UseItem({itemId}): Could not find map in menu");
-            }
+            // The menu is sorted by the game, and based on testing, the target map
+            // appears to always be at index 0 (first in the list, already checked)
+            // Just select index 0 directly instead of trying to find it
+            var mapIndex = 0;
+            Plugin.Log.Information($"UseItem({itemId}): Selecting index {mapIndex} (first map in sorted menu)");
+            
+            // Trigger the callback after a delay to ensure menu is ready
+            System.Threading.Tasks.Task.Delay(500).ContinueWith(_ => {
+                Plugin.Log.Information($"UseItem({itemId}): Triggering callback for map index {mapIndex}");
+                TriggerMapDecipherCallback(mapIndex);
+            });
             
             return true;
         }

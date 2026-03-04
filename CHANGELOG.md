@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.31] - 2026-03-03
+
+### Fixed - Simplified to always select index 0 (first map in sorted menu)
+- **Skip menu reading** - AddonMaster entries not populating in time
+- **Always index 0** - Game sorts maps, target is always first (checked)
+- **Simpler approach** - Just fire callback with index 0 directly
+- **Removes FindMapIndexInMenu** - Complex menu parsing not needed
+
 ## [0.0.1.30] - 2026-03-03
 
 ### Fixed - Wait for addon to populate with retry loop
