@@ -2,6 +2,16 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.54] - 2026-03-04
+
+### Fixed - Combat detection and portal logging
+- **Re-added combat gate** - Bot now waits during combat instead of spamming interaction attempts
+- **Portal detection logging** - Added debug logs to track portal distance and detection
+- **Combat state handling** - Returns early from TickOpeningChest when in combat, resumes after
+
+### Note
+Stackable maps (Seemingly, Ostensibly, Potentially, Conceivably Special) don't list tier in description but are equivalent to their expansion's party tier maps. Already correctly configured in TreasureMapData.
+
 ## [0.0.1.53] - 2026-03-04
 
 ### Fixed - Chest interaction loop and YesAlready pause

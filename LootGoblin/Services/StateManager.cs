@@ -501,7 +501,22 @@ public class StateManager : IDisposable
         var chestName = chest.Name.TextValue;
         var now = DateTime.Now;
 
-        // Approach chest if too far (regardless of combat state)
+        // Check if in combat
+        bool inCombat = Plugin.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat];
+        
+        if (inCombat)
+        {
+            // In combat - stop automove, wait
+            if (autoMoveActive)
+            {
+                GameHelpers.StopAutoMove();
+                autoMoveActive = false;
+            }
+            StateDetail = $"In combat - waiting for combat to end...";
+            return;
+        }
+
+        // Not in combat - approach and interact with chest
         if (dist > range)
         {
             Plugin.TargetManager.Target = chest;
@@ -523,8 +538,7 @@ public class StateManager : IDisposable
             }
         }
 
-        // Continually try to interact every ~2 seconds (regardless of combat state)
-        // Game will handle if chest is already opened or if we're in combat
+        // Continually try to interact every ~2 seconds (only when NOT in combat)
         if ((now - lastInteractionTime).TotalSeconds >= 2.0)
         {
             lastInteractionTime = now;
@@ -554,8 +568,11 @@ public class StateManager : IDisposable
             if (player != null)
             {
                 var dist = Vector3.Distance(player.Position, portalObj.Position);
+                _plugin.AddDebugLog($"[Portal] Found portal at {dist:F1}y distance");
                 if (dist <= 30f)
                     return portalObj;
+                else
+                    _plugin.AddDebugLog($"[Portal] Portal too far ({dist:F1}y > 30y)");
             }
         }
         
