@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.12] - 2026-03-03
+
+### Fixed - Map decipher menu opens
+- **Map decipher** - `/gaction decipher` now properly opens the map selection menu using `CommandHelper.SendCommand`
+- Follows FrenRider/HFH pattern: `UIModule.ProcessChatBoxEntry` for game commands
+- Menu appears with all available treasure maps in inventory order
+- TODO: Implement menu callback to auto-select correct map by index
+- For now, user must manually select the map from the menu
+
 ## [0.0.1.11] - 2026-03-03
 
 ### Fixed - Critical Hotfix v5

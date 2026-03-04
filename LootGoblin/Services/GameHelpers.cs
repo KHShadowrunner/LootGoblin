@@ -52,8 +52,10 @@ public static class GameHelpers
             CommandHelper.SendCommand("/gaction decipher");
             Plugin.Log.Information($"UseItem({itemId}): Opened decipher menu for {count} maps");
             
-            // TODO: Add menu callback to select the correct map by index
-            // For now, this opens the menu and user must select manually
+            // TODO: Implement menu callback to auto-select the correct map
+            // For now, user must manually select from the menu
+            // Maps appear in inventory order, need to find index and trigger callback
+            
             return true;
         }
         catch (Exception ex)
