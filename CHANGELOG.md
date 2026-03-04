@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.18] - 2026-03-03
+
+### Fixed - Use ECommons.Callback.Fire instead of /callback
+- **Callback method** - Replaced `/callback` commands with `ECommons.Automation.Callback.Fire`
+- **Map selection** - `Callback.Fire((AtkUnitBase*)addon, true, mapIndex)`
+- **Confirmation** - `Callback.Fire((AtkUnitBase*)addon, true, 0)`
+- **Proper API** - Uses ECommons internal callback system like Jaksuhn's SND
+- **Added using** - `using ECommons.Automation;` for Callback access
+
 ## [0.0.1.17] - 2026-03-03
 
 ### Fixed - AddonMaster null reference with fallback

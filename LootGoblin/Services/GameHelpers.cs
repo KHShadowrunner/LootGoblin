@@ -11,6 +11,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ECommons.UIHelpers.AddonMasterImplementations;
+using ECommons.Automation;
 using LootGoblin.Services;
 
 namespace LootGoblin.Services;
@@ -190,9 +191,9 @@ public static class GameHelpers
             catch (Exception ex)
             {
                 Plugin.Log.Error($"AddonMaster error: {ex.Message}");
-                // Fallback: try direct callback
-                Plugin.Log.Information($"Trying fallback callback for index {mapIndex}");
-                CommandHelper.SendCommand($"/callback SelectIconString true {mapIndex}");
+                // Fallback: try direct callback using ECommons
+                Plugin.Log.Information($"Trying ECommons.Callback.Fire for index {mapIndex}");
+                Callback.Fire((AtkUnitBase*)addon, true, mapIndex);
             }
         }
         catch (Exception ex)
@@ -233,9 +234,9 @@ public static class GameHelpers
             catch (Exception ex)
             {
                 Plugin.Log.Error($"AddonMaster.SelectYesno error: {ex.Message}");
-                // Fallback: try direct callback
-                Plugin.Log.Information("Trying fallback callback for confirmation");
-                CommandHelper.SendCommand("/callback SelectYesno true 0");
+                // Fallback: try direct callback using ECommons
+                Plugin.Log.Information("Trying ECommons.Callback.Fire for confirmation");
+                Callback.Fire((AtkUnitBase*)addon, true, 0);
             }
         }
         catch (Exception ex)
