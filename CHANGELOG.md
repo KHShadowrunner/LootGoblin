@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.41] - 2026-03-04
+
+### Added - Mount selector and navigation fixes
+- **Mount selector UI** - Searchable dropdown with all game mounts
+- **Mount configuration** - Save selected mount in settings
+- **Fixed re-pathfinding** - Only re-nav if >5y from target after 10s
+- **Navigation stability** - Prevents infinite re-pathfinding loops
+- **Mount data loading** - Loads mount names from game data like FrenRider
+
 ## [0.0.1.40] - 2026-03-04
 
 ### Added - MountService and improved landing

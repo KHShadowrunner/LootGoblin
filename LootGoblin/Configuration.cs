@@ -38,6 +38,9 @@ public class Configuration : IPluginConfiguration
     public bool AutoLootChest { get; set; } = true;
     public int ChestOpenTimeout { get; set; } = 10;
 
+    // Mount Settings
+    public string SelectedMount { get; set; } = "Company Chocobo";
+
     public void Save()
     {
         Plugin.PluginInterface.SavePluginConfig(this);

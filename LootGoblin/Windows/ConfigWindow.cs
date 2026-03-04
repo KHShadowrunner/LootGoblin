@@ -8,15 +8,18 @@ namespace LootGoblin.Windows;
 public class ConfigWindow : Window, IDisposable
 {
     private readonly Configuration configuration;
+    private readonly Plugin plugin;
+    private string mountSearch = "";
 
     public ConfigWindow(Plugin plugin) : base("Loot Goblin Settings###LootGoblinConfig")
     {
         Flags = ImGuiWindowFlags.NoCollapse;
 
-        Size = new Vector2(350, 420);
+        Size = new Vector2(350, 520);
         SizeCondition = ImGuiCond.FirstUseEver;
 
         configuration = plugin.Configuration;
+        this.plugin = plugin;
     }
 
     public void Dispose() { }
@@ -193,6 +196,48 @@ public class ConfigWindow : Window, IDisposable
         {
             configuration.ChestOpenTimeout = chestTimeout;
             configuration.Save();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.Text("Mount Settings");
+        ImGui.Spacing();
+
+        // Mount Name (searchable dropdown from game data)
+        ImGui.Text("Mount Selection");
+        ImGui.SameLine();
+        ImGui.TextDisabled("(Used for manual mounting)");
+        
+        var mountNames = plugin.MountNames;
+        var currentMount = configuration.SelectedMount;
+        ImGui.SetNextItemWidth(300);
+        if (ImGui.BeginCombo("##MountSelect", string.IsNullOrEmpty(currentMount) ? "(none)" : currentMount))
+        {
+            // Search field - fixed at top
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputText("##MountSearch", ref mountSearch, 64);
+            ImGui.Separator();
+            
+            // Scrollable list area
+            ImGui.BeginChild("##MountList", new Vector2(0, 200), false);
+            for (var i = 0; i < mountNames.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(mountSearch) &&
+                    !mountNames[i].Contains(mountSearch, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var isSelected = mountNames[i] == currentMount;
+                if (ImGui.Selectable(mountNames[i], isSelected))
+                {
+                    configuration.SelectedMount = mountNames[i];
+                    configuration.Save();
+                    mountSearch = "";
+                }
+                if (isSelected) ImGui.SetItemDefaultFocus();
+            }
+            ImGui.EndChild();
+            ImGui.EndCombo();
         }
     }
 }

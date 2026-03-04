@@ -339,18 +339,20 @@ public class StateManager : IDisposable
             return;
         }
 
-        // Re-navigate every 30 seconds in case we get stuck
+        // Re-navigate every 30 seconds in case we get stuck, but only if we're far from target
         var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
-        if ((int)elapsed % 30 == 0 && (int)elapsed > 0)
+        var currentPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+        var targetPos = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
+        var distanceFromTarget = Vector3.Distance(currentPos, targetPos);
+        
+        // Only re-navigate if we're more than 5 yalms from target AND at least 10 seconds have passed
+        if ((int)elapsed % 30 == 0 && (int)elapsed > 0 && distanceFromTarget > 5.0f)
         {
-            var target = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
-            nav.FlyToPosition(target);
-            _plugin.AddDebugLog($"Re-navigating to target (elapsed: {elapsed:F0}s)...");
+            nav.FlyToPosition(targetPos);
+            _plugin.AddDebugLog($"Re-navigating to target (elapsed: {elapsed:F0}s, distance: {distanceFromTarget:F1}y)");
         }
 
         // Check if we're close enough to X,Z coordinates (within 5 yalms)
-        var currentPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
-        var targetPos = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
         var xzDist = Math.Sqrt(Math.Pow(currentPos.X - targetPos.X, 2) + Math.Pow(currentPos.Z - targetPos.Z, 2));
         
         if (nav.State == NavigationState.Arrived || nav.State == NavigationState.Idle || xzDist < 5.0f)

@@ -48,6 +48,9 @@ public sealed class Plugin : IDalamudPlugin
     // IPC
     public GlobeTrotterIPC GlobeTrotterIPC { get; init; }
     public VNavIPC VNavIPC { get; init; }
+
+    // Mount data
+    public string[] MountNames { get; private set; } = Array.Empty<string>();
     public RotationPluginIPC RotationPluginIPC { get; init; }
 
     public List<string> DebugLog { get; } = new();
@@ -97,6 +100,9 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+
+        // Load mount names from game data
+        LoadMountNames();
 
         // Initialize ECommons callback hook for addon interactions
         try
@@ -207,4 +213,30 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
+
+    private void LoadMountNames()
+    {
+        try
+        {
+            var names = new List<string> { "Mount Roulette" };
+            var sheet = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Mount>();
+            if (sheet != null)
+            {
+                foreach (var row in sheet)
+                {
+                    var name = row.Singular.ToString();
+                    if (!string.IsNullOrWhiteSpace(name))
+                        names.Add(name);
+                }
+            }
+            names.Sort(1, names.Count - 1, StringComparer.OrdinalIgnoreCase);
+            MountNames = names.ToArray();
+            Log.Information($"Loaded {MountNames.Length} mount names from game data");
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to load mount names: {ex.Message}");
+            MountNames = new[] { "Mount Roulette", "Company Chocobo" };
+        }
+    }
 }
