@@ -120,3 +120,7 @@ coverage/
 ## Local configuration (user-specific settings)
 *.local.json
 appsettings.local.json
+
+## Project planning and documentation (keep local, don't commit)
+PROJECT_GAMEPLAN.md
+HOW_TO_IMPORT_PLUGINS.md
