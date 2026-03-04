@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.16] - 2026-03-03
+
+### Fixed - Full auto map decipher with AddonMaster
+- **Map selection** - Uses `AddonMaster.SelectIconString.Entries[index].Select()` 
+- **Confirmation** - Uses `AddonMaster.SelectYesno.Yes()` for OK button
+- **Complete automation** - Bot opens menu → selects correct map → confirms → continues
+- Follows exact FrenRider pattern for addon interactions
+- No more manual interaction required for map deciphering
+
 ## [0.0.1.15] - 2026-03-03
 
 ### Fixed - Add ECommons dependency for AddonMaster
