@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.45] - 2026-03-04
+
+### Fixed - 4 critical bugs found via FrenRider code review
+- **Fixed mount command** - Was `/gaction "mount"` (invalid), now `/mount "mount"` matching FrenRider pattern
+- **Fixed landing state transition** - Async landing paths went to InCombat, skipping chest entirely
+- **Fixed chest interaction** - `stateActionIssued` was reused for nav AND interact; added `chestInteracted` flag
+- **Fixed combat end timer** - Was using state entry time (broken); now tracks actual combat end time
+- **Reduced log spam** - Chest search logs every 5s instead of every tick
+
 ## [0.0.1.44] - 2026-03-04
 
 ### Fixed - Mount selection and chest interaction debugging

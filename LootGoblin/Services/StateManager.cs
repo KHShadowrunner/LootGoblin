@@ -26,6 +26,8 @@ public class StateManager : IDisposable
     private DateTime lastTickTime = DateTime.MinValue;
     private DateTime lastMapScanTime = DateTime.MinValue;
     private bool stateActionIssued;
+    private bool chestInteracted; // Separate flag: true after we've called InteractWithObject on chest
+    private DateTime combatEndTime; // Track when combat actually ended
     private const double TickIntervalSeconds = 0.5;
     private readonly MountService _mountService;
 
@@ -382,7 +384,7 @@ public class StateManager : IDisposable
                         CommandHelper.SendCommand("/gaction dig");
                         _plugin.AddDebugLog("Using /gaction dig to trigger map content...");
                         
-                        TransitionTo(BotState.InCombat, "Waiting for combat to start...");
+                        TransitionTo(BotState.OpeningChest, "Looking for treasure coffer to interact...");
                     }
                     else
                     {
@@ -394,7 +396,7 @@ public class StateManager : IDisposable
                         CommandHelper.SendCommand("/gaction dig");
                         _plugin.AddDebugLog("Using /gaction dig to trigger map content...");
                         
-                        TransitionTo(BotState.InCombat, "Waiting for combat to start...");
+                        TransitionTo(BotState.OpeningChest, "Looking for treasure coffer to interact...");
                     }
                 });
                 return;
@@ -410,60 +412,68 @@ public class StateManager : IDisposable
 
     private void TickOpeningChest()
     {
-        _plugin.AddDebugLog($"[OpeningChest] Tick - State: {State}, ActionIssued: {stateActionIssued}");
-        
+        // Check if combat started (could happen at any point after chest interaction)
+        if (_plugin.NavigationService.IsInCombat())
+        {
+            _plugin.AddDebugLog("[OpeningChest] Combat detected! Transitioning to InCombat...");
+            TransitionTo(BotState.InCombat, "Combat started from chest interaction!");
+            return;
+        }
+
         var chest = _plugin.ChestDetectionService.FindNearestCoffer();
-        _plugin.AddDebugLog($"[OpeningChest] Chest found: {chest != null}, Distance: {_plugin.ChestDetectionService.NearestCofferDistance:F1}y");
 
         if (chest == null)
         {
-            // No coffer visible yet - keep waiting
             var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
             StateDetail = $"Searching for treasure coffer... ({elapsed:F0}s)";
+            if ((int)elapsed % 5 == 0 && (int)elapsed > 0)
+                _plugin.AddDebugLog($"[OpeningChest] No coffer found yet ({elapsed:F0}s)");
             return;
         }
 
         var dist = _plugin.ChestDetectionService.NearestCofferDistance;
         var range = _plugin.Configuration.ChestInteractionRange;
+        var chestName = chest.Name.TextValue;
 
+        // Step 1: Navigate to chest if too far
         if (dist > range)
         {
-            // Navigate closer if needed
             if (!stateActionIssued)
             {
+                _plugin.AddDebugLog($"[OpeningChest] Coffer '{chestName}' found at {dist:F1}y - moving closer (range: {range})");
                 _plugin.NavigationService.MoveToPosition(chest.Position);
                 stateActionIssued = true;
-                StateDetail = $"Moving to coffer '{chest.Name.TextValue}' ({dist:F1}y)...";
             }
+            StateDetail = $"Moving to '{chestName}' ({dist:F1}y away)...";
             return;
         }
 
-        // In range - stop navigation and interact with chest
+        // Step 2: In range - stop nav and interact
         _plugin.NavigationService.StopNavigation();
-        
-        // Try to interact with chest - this should trigger combat
-        if (!stateActionIssued)
+
+        if (!chestInteracted)
         {
-            _plugin.AddDebugLog($"[OpeningChest] In range of '{chest.Name.TextValue}' - attempting to interact...");
+            _plugin.AddDebugLog($"[OpeningChest] In range of '{chestName}' ({dist:F1}y) - attempting interaction...");
             var interacted = GameHelpers.InteractWithObject(chest);
             _plugin.AddDebugLog($"[OpeningChest] InteractWithObject returned: {interacted}");
             
             if (interacted)
             {
-                _plugin.AddDebugLog($"[OpeningChest] Successfully interacted with '{chest.Name.TextValue}'");
-                stateActionIssued = true;
-                StateDetail = "Chest interacted - waiting for combat to start...";
+                chestInteracted = true;
+                _plugin.AddDebugLog($"[OpeningChest] Successfully interacted with '{chestName}' - waiting for combat...");
+                StateDetail = $"Interacted with '{chestName}' - waiting for combat...";
             }
             else
             {
-                _plugin.AddDebugLog($"[OpeningChest] Failed to interact with '{chest.Name.TextValue}' - will retry");
-                stateActionIssued = false; // Allow retry
+                _plugin.AddDebugLog($"[OpeningChest] InteractWithObject failed for '{chestName}' - will retry next tick");
+                StateDetail = $"Interaction failed - retrying...";
             }
         }
         else
         {
-            StateDetail = $"Waiting near '{chest.Name.TextValue}' for combat to start...";
-            _plugin.AddDebugLog($"[OpeningChest] Already interacted - waiting for combat...");
+            // Already interacted, waiting for combat to start
+            var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
+            StateDetail = $"Waiting for combat after chest interaction... ({elapsed:F0}s)";
         }
     }
 
@@ -528,65 +538,69 @@ public class StateManager : IDisposable
 
     private void TickInCombat()
     {
-        // Check if combat has started
+        // Check if combat is active
         if (_plugin.NavigationService.IsInCombat())
         {
             // Combat is active - enable BMR AI
             if (!stateActionIssued)
             {
                 CommandHelper.SendCommand("/bmrai on");
-                _plugin.AddDebugLog("Combat started - enabled BMR AI");
+                _plugin.AddDebugLog("[InCombat] Combat active - enabled BMR AI");
                 stateActionIssued = true;
+                combatEndTime = DateTime.MinValue; // Reset end tracker
             }
             StateDetail = "In combat - BMR AI active...";
             return;
         }
         
-        // Combat ended - wait 5-8 seconds then interact with chest again
-        var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
-        if (elapsed < 6)
+        // Combat not active - track when it ended
+        if (combatEndTime == DateTime.MinValue)
         {
-            StateDetail = $"Combat ended - waiting before 2nd chest interaction... ({elapsed:F0}/6s)";
+            combatEndTime = DateTime.Now;
+            _plugin.AddDebugLog("[InCombat] Combat ended - starting 6s cooldown...");
+        }
+        
+        var sinceEnd = (DateTime.Now - combatEndTime).TotalSeconds;
+        if (sinceEnd < 6)
+        {
+            StateDetail = $"Combat ended - waiting before 2nd chest interaction... ({sinceEnd:F0}/6s)";
             return;
         }
         
         // Time to interact with chest again (post-combat)
-        _plugin.AddDebugLog("Combat ended - attempting 2nd chest interaction...");
+        _plugin.AddDebugLog("[InCombat] 6s cooldown done - attempting 2nd chest interaction...");
         var chest = _plugin.ChestDetectionService.FindNearestCoffer();
         
         if (chest != null)
         {
             var dist = _plugin.ChestDetectionService.NearestCofferDistance;
+            _plugin.AddDebugLog($"[InCombat] Chest '{chest.Name.TextValue}' at {dist:F1}y");
+            
             if (dist <= _plugin.Configuration.ChestInteractionRange)
             {
-                // Try to interact with chest again
                 var interacted = GameHelpers.InteractWithObject(chest);
+                _plugin.AddDebugLog($"[InCombat] 2nd InteractWithObject returned: {interacted}");
+                
                 if (interacted)
                 {
-                    _plugin.AddDebugLog($"2nd interaction with '{chest.Name.TextValue}' successful - checking for portal...");
-                    
-                    // Wait a moment then check for portal
-                    System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => {
-                        CheckForPortalAfterChest();
-                    });
+                    _plugin.AddDebugLog($"[InCombat] 2nd interaction successful - checking for portal...");
                 }
                 else
                 {
-                    _plugin.AddDebugLog("2nd chest interaction failed - checking for portal anyway...");
-                    CheckForPortalAfterChest();
+                    _plugin.AddDebugLog("[InCombat] 2nd interaction failed - checking for portal anyway...");
                 }
             }
             else
             {
-                _plugin.AddDebugLog($"Chest too far for 2nd interaction ({dist:F1}y) - checking for portal...");
-                CheckForPortalAfterChest();
+                _plugin.AddDebugLog($"[InCombat] Chest too far ({dist:F1}y) - checking for portal...");
             }
         }
         else
         {
-            _plugin.AddDebugLog("No chest found for 2nd interaction - checking for portal...");
-            CheckForPortalAfterChest();
+            _plugin.AddDebugLog("[InCombat] No chest found post-combat - checking for portal...");
         }
+        
+        CheckForPortalAfterChest();
     }
 
     private void TickInDungeon()
@@ -655,6 +669,8 @@ public class StateManager : IDisposable
         StateDetail = detail;
         stateStartTime = DateTime.Now;
         stateActionIssued = false;
+        chestInteracted = false;
+        combatEndTime = DateTime.MinValue;
 
         if (_plugin.Configuration.EnableStateLogging)
             _plugin.AddDebugLog($"[State] {prev} → {newState} | {detail}");
