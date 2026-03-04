@@ -193,7 +193,7 @@ public static class GameHelpers
                 Plugin.Log.Error($"AddonMaster error: {ex.Message}");
                 // Fallback: try direct callback using ECommons
                 Plugin.Log.Information($"Trying ECommons.Callback.Fire for index {mapIndex}");
-                Callback.Fire((AtkUnitBase*)addon, true, mapIndex);
+                Callback.Fire(&addon->AtkUnitBase, true, mapIndex);
             }
         }
         catch (Exception ex)
@@ -236,7 +236,7 @@ public static class GameHelpers
                 Plugin.Log.Error($"AddonMaster.SelectYesno error: {ex.Message}");
                 // Fallback: try direct callback using ECommons
                 Plugin.Log.Information("Trying ECommons.Callback.Fire for confirmation");
-                Callback.Fire((AtkUnitBase*)addon, true, 0);
+                Callback.Fire(&addon->AtkUnitBase, true, 0);
             }
         }
         catch (Exception ex)

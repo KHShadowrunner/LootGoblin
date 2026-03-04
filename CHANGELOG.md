@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.19] - 2026-03-03
+
+### Fixed - Install ECommons.Callback hook for addon interactions
+- **Callback hook** - Added `Callback.InstallHook()` in Plugin constructor
+- **Proper disposal** - Added `Callback.UninstallHook()` in Plugin.Dispose
+- **Fixed pointer** - Use `&addon->AtkUnitBase` instead of cast
+- **Addon interactions** - Callback.Fire now properly initialized
+- **Required for callbacks** - ECommons needs hook installed for addon callbacks to work
+
 ## [0.0.1.18] - 2026-03-03
 
 ### Fixed - Use ECommons.Callback.Fire instead of /callback

@@ -5,6 +5,8 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
+using ECommons;
+using ECommons.Automation;
 using LootGoblin.IPC;
 using LootGoblin.Services;
 using LootGoblin.Windows;
@@ -96,6 +98,17 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 
+        // Initialize ECommons callback hook for addon interactions
+        try
+        {
+            Callback.InstallHook();
+            AddDebugLog("ECommons callback hook installed.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to install ECommons callback hook: {ex.Message}");
+        }
+
         AddDebugLog("Loot Goblin loaded.");
         Log.Information("===Loot Goblin loaded!===");
     }
@@ -123,6 +136,17 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.RemoveHandler(CommandName);
         CommandManager.RemoveHandler(CommandAlias);
+
+        // Dispose ECommons callback hook
+        try
+        {
+            Callback.UninstallHook();
+            AddDebugLog("ECommons callback hook uninstalled.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to uninstall ECommons callback hook: {ex.Message}");
+        }
 
         Log.Information("===Loot Goblin unloaded!===");
     }
