@@ -510,11 +510,16 @@ public class StateManager : IDisposable
         
         if (inCombat)
         {
-            // In combat - stop automove, wait, but keep checking for portal above
+            // In combat - stop automove and clear target so we're not chained to chest
             if (autoMoveActive)
             {
                 GameHelpers.StopAutoMove();
                 autoMoveActive = false;
+            }
+            // Clear target so player can fight freely
+            if (Plugin.TargetManager.Target?.Name.ToString() == chestName)
+            {
+                Plugin.TargetManager.Target = null;
             }
             StateDetail = $"In combat - waiting for combat to end...";
             return;

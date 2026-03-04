@@ -2,6 +2,13 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.57] - 2026-03-04
+
+### Fixed - Target cleared during combat to prevent lockon issues
+- **Fixed combat interference** - Bot now clears target during combat so player can fight freely
+- **Root cause** - Bot was staying locked onto chest during combat, preventing free movement
+- **Solution** - Added target clear check during combat: if target is chest, set to null
+
 ## [0.0.1.56] - 2026-03-04
 
 ### Fixed - Portal detection not working after combat
