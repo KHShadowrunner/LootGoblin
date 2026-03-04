@@ -2,6 +2,13 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.56] - 2026-03-04
+
+### Fixed - Portal detection not working after combat
+- **Fixed portal check** - Now checks for portal EVERY tick, not just before combat check
+- **Root cause** - Portal check was before combat check, so during combat the method returned early and never rechecked for portal after combat ended
+- **Solution** - Moved portal check to top of loop (after ClickYes) so it runs every tick regardless of combat state
+
 ## [0.0.1.55] - 2026-03-04
 
 ### Fixed - Dig command not executing after dismount

@@ -464,7 +464,10 @@ public class StateManager : IDisposable
 
     private void TickOpeningChest()
     {
-        // First check if portal is targetable - if so, we're done with chests
+        // Click Yes on any dialog (Open the treasure coffer? etc)
+        GameHelpers.ClickYesIfVisible();
+        
+        // Check for portal EVERY tick - portals can appear during/after combat
         var portal = FindNearestPortal();
         if (portal != null)
         {
@@ -477,9 +480,6 @@ public class StateManager : IDisposable
             CheckForPortalAfterChest();
             return;
         }
-        
-        // Click Yes on any dialog (Open the treasure coffer? etc)
-        GameHelpers.ClickYesIfVisible();
         
         // No portal yet - keep working on chest
         var chest = _plugin.ChestDetectionService.FindNearestCoffer();
@@ -510,7 +510,7 @@ public class StateManager : IDisposable
         
         if (inCombat)
         {
-            // In combat - stop automove, wait
+            // In combat - stop automove, wait, but keep checking for portal above
             if (autoMoveActive)
             {
                 GameHelpers.StopAutoMove();
