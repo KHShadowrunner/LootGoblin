@@ -388,6 +388,21 @@ public class StateManager : IDisposable
         // Check if we're close enough to X,Z coordinates (within 5 yalms)
         var xzDist = Math.Sqrt(Math.Pow(currentPos.X - targetPos.X, 2) + Math.Pow(currentPos.Z - targetPos.Z, 2));
         
+        // If we're not mounted, we've already dismounted - proceed with dig regardless of nav state
+        if (!_plugin.NavigationService.IsMounted() && dismountAttemptStart != DateTime.MinValue)
+        {
+            _plugin.AddDebugLog("Successfully dismounted - proceeding with map content");
+            
+            CommandHelper.SendCommand("/bmrai on");
+            _plugin.AddDebugLog("Enabled BMR AI after dismount");
+            
+            CommandHelper.SendCommand("/gaction dig");
+            _plugin.AddDebugLog("Using /gaction dig to trigger map content...");
+            
+            TransitionTo(BotState.OpeningChest, "Looking for treasure coffer to interact...");
+            return;
+        }
+        
         if (nav.State == NavigationState.Arrived || nav.State == NavigationState.Idle || xzDist < 5.0f)
         {
             // We've arrived at the flag X,Z — now we need to dismount
@@ -444,17 +459,6 @@ public class StateManager : IDisposable
                 StateDetail = $"Underwater descent in progress... ({dismountElapsed:F0}s)";
                 return;
             }
-            
-            // Successfully dismounted — proceed with map content
-            _plugin.AddDebugLog("Successfully dismounted - proceeding with map content");
-            
-            CommandHelper.SendCommand("/bmrai on");
-            _plugin.AddDebugLog("Enabled BMR AI after dismount");
-            
-            CommandHelper.SendCommand("/gaction dig");
-            _plugin.AddDebugLog("Using /gaction dig to trigger map content...");
-            
-            TransitionTo(BotState.OpeningChest, "Looking for treasure coffer to interact...");
         }
     }
 

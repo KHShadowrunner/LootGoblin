@@ -2,6 +2,13 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.55] - 2026-03-04
+
+### Fixed - Dig command not executing after dismount
+- **Fixed dig logic** - Now checks if dismounted BEFORE checking nav state, ensuring `/gaction dig` executes immediately after dismount
+- **Root cause** - After underwater dismount, vnavmesh was still in "Flying" state, so the dig block was never reached
+- **Solution** - Prioritize dismount check over nav state check, proceed with dig as soon as `!IsMounted()` and `dismountAttemptStart != MinValue`
+
 ## [0.0.1.54] - 2026-03-04
 
 ### Fixed - Combat detection and portal logging
