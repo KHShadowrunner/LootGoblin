@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.50] - 2026-03-04
+
+### Fixed - 2nd chest interaction after combat
+- **InCombat→OpeningChest transition** - After 6s combat cooldown, now transitions back to OpeningChest state instead of trying one-shot interaction
+- **chestInteractionCount tracking** - Tracks 1st (pre-combat) and 2nd (post-combat) chest interactions
+- **Navigation to 2nd chest** - Bot now navigates to chest after combat instead of standing in place
+- **Portal search timing** - After 2nd chest interaction + 3s wait, transitions to portal search
+- **Counter resets** - chestInteractionCount resets in Start() and ResetAll()
+
 ## [0.0.1.49] - 2026-03-04
 
 ### Fixed - Yes/No dialog handling and timeouts
