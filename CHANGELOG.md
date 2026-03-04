@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.39] - 2026-03-04
+
+### Fixed - Proper landing with /mount command
+- **Removed /vnav land** - Not a real command
+- **Mount toggle** - Uses /mount once per second to trigger landing
+- **Rate limited** - Maximum 1 attempt per second, 5 attempts total
+- **Async landing** - Proper async/await pattern for landing attempts
+
 ## [0.0.1.38] - 2026-03-04
 
 ### Fixed - Landing at treasure location

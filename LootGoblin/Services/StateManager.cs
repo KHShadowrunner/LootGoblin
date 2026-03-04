@@ -356,20 +356,36 @@ public class StateManager : IDisposable
             // Force landing if we're flying
             if (_plugin.NavigationService.IsMounted())
             {
-                CommandHelper.SendCommand("/vnav land");
-                _plugin.AddDebugLog("Landing at treasure location...");
+                _plugin.AddDebugLog("Close to target - attempting to land by toggling mount...");
                 
-                // Wait a moment for landing to complete
-                System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => {
-                    // Dismount after landing
-                    CommandHelper.SendCommand("/gaction dismount");
-                    _plugin.AddDebugLog("Dismounted at treasure location...");
+                // Toggle mount once per second to trigger landing
+                var landAttempts = 0;
+                var maxAttempts = 5;
+                
+                System.Threading.Tasks.Task.Run(async () => {
+                    while (landAttempts < maxAttempts && _plugin.NavigationService.IsMounted())
+                    {
+                        CommandHelper.SendCommand("/mount");
+                        _plugin.AddDebugLog($"Landing attempt {landAttempts + 1}/{maxAttempts}");
+                        landAttempts++;
+                        await System.Threading.Tasks.Task.Delay(1000); // Wait 1 second between attempts
+                    }
                     
-                    // Use /gaction dig to trigger the map content
-                    CommandHelper.SendCommand("/gaction dig");
-                    _plugin.AddDebugLog("Using /gaction dig to trigger map content...");
-                    
-                    TransitionTo(BotState.InCombat, "Waiting for combat to start...");
+                    // If we're no longer mounted, proceed with map content
+                    if (!_plugin.NavigationService.IsMounted())
+                    {
+                        _plugin.AddDebugLog("Successfully landed - proceeding with map content");
+                        
+                        // Use /gaction dig to trigger the map content
+                        CommandHelper.SendCommand("/gaction dig");
+                        _plugin.AddDebugLog("Using /gaction dig to trigger map content...");
+                        
+                        TransitionTo(BotState.InCombat, "Waiting for combat to start...");
+                    }
+                    else
+                    {
+                        _plugin.AddDebugLog("Failed to land after multiple attempts");
+                    }
                 });
                 return;
             }
