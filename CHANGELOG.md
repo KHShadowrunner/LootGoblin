@@ -2,6 +2,14 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.37] - 2026-03-04
+
+### Fixed - Proper portal interaction
+- **Teleportation Portal** - Now looks for correct portal name
+- **Portal interaction** - Interacts with portal first to get popup
+- **Journey confirmation** - Clicks yes to "Journey through the portal?"
+- **Two-step process** - Interact → wait for popup → confirm
+
 ## [0.0.1.36] - 2026-03-04
 
 ### Fixed - Correct map content flow order

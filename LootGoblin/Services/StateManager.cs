@@ -404,16 +404,29 @@ public class StateManager : IDisposable
                 
                 // Schedule check for portal after 2 seconds
                 System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => {
-                    // Look for portal (EventObj with "Portal" in name)
+                    // Look for portal (EventObj with "Teleportation Portal" in name)
                     var portal = FindNearestPortal();
                     if (portal != null)
                     {
-                        _plugin.AddDebugLog($"Found portal '{portal.Name.TextValue}' - entering dungeon...");
-                        // Click portal and confirm
-                        System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ => {
-                            CommandHelper.SendCommand("/click yes");
-                            _plugin.AddDebugLog("Clicked yes to enter portal");
-                        });
+                        _plugin.AddDebugLog($"Found portal '{portal.Name.TextValue}' - interacting to enter dungeon...");
+                        
+                        // First interact with the portal to get the popup
+                        var interacted = GameHelpers.InteractWithObject(portal);
+                        if (interacted)
+                        {
+                            _plugin.AddDebugLog("Interacted with portal - waiting for 'Journey through the portal?' popup");
+                            
+                            // Wait for popup then click yes
+                            System.Threading.Tasks.Task.Delay(1500).ContinueWith(_ => {
+                                CommandHelper.SendCommand("/click yes");
+                                _plugin.AddDebugLog("Clicked yes to 'Journey through the portal?'");
+                            });
+                        }
+                        else
+                        {
+                            _plugin.AddDebugLog("Failed to interact with portal");
+                        }
+                        
                         TransitionTo(BotState.InDungeon, "Entering dungeon instance...");
                     }
                     else
@@ -441,7 +454,7 @@ public class StateManager : IDisposable
         foreach (var obj in Plugin.ObjectTable)
         {
             if (obj.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj) continue;
-            if (obj.Name.TextValue.Contains("Portal", StringComparison.OrdinalIgnoreCase))
+            if (obj.Name.TextValue.Contains("Teleportation Portal", StringComparison.OrdinalIgnoreCase))
             {
                 var dist = Vector3.Distance(player.Position, obj.Position);
                 if (dist < nearestDist && dist < 10f) // Within 10y
