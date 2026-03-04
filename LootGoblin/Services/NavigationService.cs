@@ -117,8 +117,14 @@ public class NavigationService : IDisposable
             return;
         }
 
-        CommandHelper.SendCommand("/gaction \"Mount Roulette\"");
-        SetState(NavigationState.Mounting, "Mounting...");
+        var selectedMount = _plugin.Configuration.SelectedMount ?? "Company Chocobo";
+        var mountCommand = selectedMount == "Mount Roulette" 
+            ? "/gaction \"Mount Roulette\"" 
+            : $"/gaction \"{selectedMount}\"";
+        
+        _plugin.AddDebugLog($"Using mount command: {mountCommand}");
+        CommandHelper.SendCommand(mountCommand);
+        SetState(NavigationState.Mounting, $"Mounting {selectedMount}...");
     }
 
     public void FlyToFlag()

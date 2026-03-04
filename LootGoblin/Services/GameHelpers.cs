@@ -331,21 +331,32 @@ public static class GameHelpers
     {
         try
         {
+            Plugin.Log.Information($"[INTERACT] Starting interaction with {obj.Name.TextValue} (Address: {obj.Address:X})");
+            
             Plugin.TargetManager.Target = obj;
 
             var ts = TargetSystem.Instance();
-            if (ts == null) return false;
+            if (ts == null)
+            {
+                Plugin.Log.Error("[INTERACT] TargetSystem.Instance() returned null");
+                return false;
+            }
 
             var gameObjPtr = (GameObject*)obj.Address;
-            if (gameObjPtr == null) return false;
+            if (gameObjPtr == null)
+            {
+                Plugin.Log.Error($"[INTERACT] Failed to cast GameObject* from address {obj.Address:X}");
+                return false;
+            }
 
+            Plugin.Log.Information($"[INTERACT] Calling TargetSystem.InteractWithObject for {obj.Name.TextValue}");
             ts->InteractWithObject(gameObjPtr, true);
-            Plugin.Log.Information($"InteractWithObject: {obj.Name.TextValue} at {obj.Position}");
+            Plugin.Log.Information($"[INTERACT] InteractWithObject called successfully for {obj.Name.TextValue} at {obj.Position}");
             return true;
         }
         catch (Exception ex)
         {
-            Plugin.Log.Error($"InteractWithObject failed: {ex.Message}");
+            Plugin.Log.Error($"[INTERACT] InteractWithObject failed: {ex.Message}\n{ex.StackTrace}");
             return false;
         }
     }

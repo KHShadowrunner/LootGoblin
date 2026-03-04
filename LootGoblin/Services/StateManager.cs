@@ -37,7 +37,7 @@ public class StateManager : IDisposable
         { BotState.Mounting,          30  },
         { BotState.WaitingForParty,   120 },
         { BotState.Flying,            300 },
-        { BotState.OpeningChest,      15  },
+        { BotState.OpeningChest,      60  },
     };
 
     public StateManager(Plugin plugin, IFramework framework, IPluginLog log)
@@ -77,8 +77,12 @@ public class StateManager : IDisposable
     private void CheckStateTimeout()
     {
         if (!StateTimeouts.TryGetValue(State, out var timeout)) return;
-        if ((DateTime.Now - stateStartTime).TotalSeconds > timeout)
+        var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
+        if (elapsed > timeout)
+        {
+            _plugin.AddDebugLog($"[TIMEOUT] State {State} timed out after {elapsed:F0}s (limit: {timeout}s)");
             HandleError($"Timeout in state {State} after {timeout}s.");
+        }
     }
 
     private void Tick()
@@ -406,7 +410,10 @@ public class StateManager : IDisposable
 
     private void TickOpeningChest()
     {
+        _plugin.AddDebugLog($"[OpeningChest] Tick - State: {State}, ActionIssued: {stateActionIssued}");
+        
         var chest = _plugin.ChestDetectionService.FindNearestCoffer();
+        _plugin.AddDebugLog($"[OpeningChest] Chest found: {chest != null}, Distance: {_plugin.ChestDetectionService.NearestCofferDistance:F1}y");
 
         if (chest == null)
         {
@@ -437,24 +444,26 @@ public class StateManager : IDisposable
         // Try to interact with chest - this should trigger combat
         if (!stateActionIssued)
         {
-            _plugin.AddDebugLog($"In range of '{chest.Name.TextValue}' - attempting to interact...");
+            _plugin.AddDebugLog($"[OpeningChest] In range of '{chest.Name.TextValue}' - attempting to interact...");
             var interacted = GameHelpers.InteractWithObject(chest);
+            _plugin.AddDebugLog($"[OpeningChest] InteractWithObject returned: {interacted}");
             
             if (interacted)
             {
-                _plugin.AddDebugLog($"Successfully interacted with '{chest.Name.TextValue}'");
+                _plugin.AddDebugLog($"[OpeningChest] Successfully interacted with '{chest.Name.TextValue}'");
                 stateActionIssued = true;
                 StateDetail = "Chest interacted - waiting for combat to start...";
             }
             else
             {
-                _plugin.AddDebugLog($"Failed to interact with '{chest.Name.TextValue}' - will retry");
+                _plugin.AddDebugLog($"[OpeningChest] Failed to interact with '{chest.Name.TextValue}' - will retry");
                 stateActionIssued = false; // Allow retry
             }
         }
         else
         {
             StateDetail = $"Waiting near '{chest.Name.TextValue}' for combat to start...";
+            _plugin.AddDebugLog($"[OpeningChest] Already interacted - waiting for combat...");
         }
     }
 

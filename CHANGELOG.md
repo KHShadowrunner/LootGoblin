@@ -2,6 +2,15 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.44] - 2026-03-04
+
+### Fixed - Mount selection and chest interaction debugging
+- **Fixed mount selection** - Now uses selected mount instead of hardcoded "Mount Roulette"
+- **Increased chest timeout** - From 15s to 60s to prevent premature completion
+- **Added extensive debug logging** - Chest detection, interaction attempts, state transitions
+- **Detailed interaction logging** - Shows TargetSystem calls and object addresses
+- **Timeout debugging** - Logs when states timeout with elapsed time
+
 ## [0.0.1.43] - 2026-03-04
 
 ### Fixed - Simplified chest interaction flow
