@@ -2,6 +2,19 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.66] - 2026-03-04
+
+### Fixed
+- **Combat-ended looting** - After combat ends in dungeon, bot now checks for loot and transitions to DungeonLooting if chests/coffers/sacks exist
+- **Sluice Gate detection** - Added partial matching for door names (door, gate, sphere) to detect "Sluice Gate" and other door variations
+- **Door priority logic** - Doors are now only targeted if no loot exists within 50y (prevents targeting doors when loot is in other rooms)
+- **Object detection robustness** - Improved partial matching for dungeon objects instead of exact string matching
+
+### Changed
+- `FindDungeonObjects()` now uses two-pass approach: first checks for loot within 50y, then filters doors based on loot presence
+- Door detection uses partial matching: "door", "gate", "sphere" substrings
+- Loot detection expanded with better partial matching
+
 ## [0.0.1.65] - 2026-03-04
 
 ### Fixed

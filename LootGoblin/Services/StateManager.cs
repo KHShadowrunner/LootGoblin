@@ -804,8 +804,17 @@ public class StateManager : IDisposable
             return;
         }
 
-        // Combat ended - go back to InDungeon to scan for loot/progression
+        // Combat ended - check for loot first before going back to InDungeon
         _plugin.AddDebugLog($"[Dungeon] Combat ended on floor {dungeonFloor}");
+        
+        var lootObjects = FindDungeonObjects(lootOnly: true);
+        if (lootObjects.Count > 0)
+        {
+            _plugin.AddDebugLog($"[Dungeon] Combat ended - {lootObjects.Count} loot object(s) found");
+            TransitionTo(BotState.DungeonLooting, $"Looting after combat on floor {dungeonFloor}...");
+            return;
+        }
+        
         TransitionTo(BotState.InDungeon, $"Combat ended - scanning floor {dungeonFloor}...");
     }
 
@@ -1215,9 +1224,27 @@ public class StateManager : IDisposable
         var player = Plugin.ObjectTable.LocalPlayer;
         if (player == null) return new List<IGameObject>();
 
-        // Priority: Arcane Sphere, then loot (treasure/coffer/chest/sack), then progression (doors)
+        // Priority: Arcane Sphere, then loot (treasure/coffer/chest/sack), then progression (doors/gates)
         var lootNames = new[] { "treasure", "coffer", "chest", "sack" };
         var sphereName = "arcane sphere";
+        var doorNames = new[] { "door", "gate", "sphere" }; // Partial matching for doors (Sluice Gate, etc)
+
+        // First pass: find all loot objects within 50y for door priority check
+        var allLoot = Plugin.ObjectTable
+            .Where(obj =>
+            {
+                if (obj == null || obj.ObjectKind != ObjectKind.EventObj) return false;
+                var name = obj.Name.ToString();
+                if (string.IsNullOrEmpty(name)) return false;
+                var dist = Vector3.Distance(player.Position, obj.Position);
+                if (dist > 50f) return false; // Check within 50y for door priority
+                
+                var lower = name.ToLowerInvariant();
+                return lower.Contains(sphereName) || lootNames.Any(l => lower.Contains(l));
+            })
+            .ToList();
+
+        bool hasNearbyLoot = allLoot.Count > 0;
 
         return Plugin.ObjectTable
             .Where(obj =>
@@ -1225,7 +1252,8 @@ public class StateManager : IDisposable
                 if (obj == null) return false;
                 var name = obj.Name.ToString();
                 if (string.IsNullOrEmpty(name)) return false;
-                if (Vector3.Distance(player.Position, obj.Position) > 30f) return false;
+                var dist = Vector3.Distance(player.Position, obj.Position);
+                if (dist > 30f) return false; // 30y for interaction range
 
                 // Only EventObj type (interactive dungeon objects)
                 if (obj.ObjectKind != ObjectKind.EventObj) return false;
@@ -1236,13 +1264,22 @@ public class StateManager : IDisposable
                 var lower = name.ToLowerInvariant();
                 bool isSphere = lower.Contains(sphereName);
                 bool isLoot = lootNames.Any(l => lower.Contains(l));
+                bool isDoor = doorNames.Any(d => lower.Contains(d));
 
                 if (lootOnly)
                     return isSphere || isLoot; // Sphere counts as loot priority
 
-                // For progression: return non-loot EventObj
-                // Exclude any door we gave up on (stuck)
+                // For progression: return doors/gates, but NOT if loot exists within 50y
                 if (isSphere || isLoot) return false;
+                
+                // Don't return doors if there's loot within 50y (other rooms)
+                if (isDoor && hasNearbyLoot)
+                {
+                    _plugin.AddDebugLog($"[Dungeon] Skipping door '{name}' - loot within 50y");
+                    return false;
+                }
+                
+                // Exclude any door we gave up on (stuck)
                 if (excludedDoorEntityId.HasValue && obj.EntityId == excludedDoorEntityId.Value)
                     return false;
 
