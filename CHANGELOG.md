@@ -2,6 +2,13 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.63] - 2026-03-04
+
+### Fixed
+- **Dungeon detection** - Bot now checks ObjectTable for "Teleportation Portal" to determine if still outside vs actually inside dungeon
+- If portal exists in ObjectTable, bot correctly stays in Completed state searching for portal instead of incorrectly transitioning to InDungeon state
+- Prevents false "inside dungeon" state when still outside waiting for portal interaction
+
 ## [0.0.1.62] - 2026-03-04
 
 ### Changed

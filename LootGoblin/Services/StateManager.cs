@@ -624,6 +624,16 @@ public class StateManager : IDisposable
     {
         GameHelpers.ClickYesIfVisible();
 
+        // Check if portal exists in ObjectTable - if so, we're still outside, not inside dungeon
+        var portal = FindNearestPortal();
+        if (portal != null)
+        {
+            _plugin.AddDebugLog("[InDungeon] Teleportation Portal detected - still outside, transitioning back to Completed");
+            portalRetryStart = DateTime.Now;
+            TransitionTo(BotState.Completed, "Portal found - searching for portal...");
+            return;
+        }
+
         bool inDuty = Plugin.Condition[ConditionFlag.BoundByDuty] ||
                       Plugin.Condition[ConditionFlag.BoundByDuty56];
         bool loading = Plugin.Condition[ConditionFlag.BetweenAreas] ||
