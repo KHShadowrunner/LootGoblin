@@ -2,6 +2,13 @@
 
 All notable changes to LootGoblin will be documented in this file.
 
+## [0.0.1.59] - 2026-03-04
+
+### Fixed
+- **Navigation bug** - Replaced ineffective `/lockon` + `/automove` commands with proper vnavmesh pathfinding
+- Bot now correctly navigates to chests, dungeon loot, and progression objects using `NavigationService.MoveToPosition()`
+- All movement now uses vnavmesh for reliable pathfinding instead of simple automove toggle
+
 ## [0.0.1.58] - 2026-03-04
 
 ### Added - Phase 8: Dungeon Handling

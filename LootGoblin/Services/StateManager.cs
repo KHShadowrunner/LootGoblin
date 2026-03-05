@@ -495,7 +495,7 @@ public class StateManager : IDisposable
             _plugin.AddDebugLog("[OpeningChest] Portal detected - transitioning to portal interaction...");
             if (autoMoveActive)
             {
-                GameHelpers.StopAutoMove();
+                _plugin.NavigationService.StopNavigation();
                 autoMoveActive = false;
             }
             CheckForPortalAfterChest();
@@ -531,10 +531,10 @@ public class StateManager : IDisposable
         
         if (inCombat)
         {
-            // In combat - stop automove and clear target so we're not chained to chest
+            // In combat - stop navigation and clear target so we're not chained to chest
             if (autoMoveActive)
             {
-                GameHelpers.StopAutoMove();
+                _plugin.NavigationService.StopNavigation();
                 autoMoveActive = false;
             }
             // Clear target so player can fight freely
@@ -552,18 +552,18 @@ public class StateManager : IDisposable
             Plugin.TargetManager.Target = chest;
             if (!autoMoveActive)
             {
-                _plugin.AddDebugLog($"[OpeningChest] Coffer '{chestName}' at {dist:F1}y - lockon+automove approach");
-                GameHelpers.LockOnAndAutoMove();
+                _plugin.AddDebugLog($"[OpeningChest] Coffer '{chestName}' at {dist:F1}y - navigating via vnavmesh");
+                _plugin.NavigationService.MoveToPosition(chest.Position);
                 autoMoveActive = true;
             }
             StateDetail = $"Approaching '{chestName}' ({dist:F1}y away)...";
         }
         else
         {
-            // In range - stop automove
+            // In range - stop navigation
             if (autoMoveActive)
             {
-                GameHelpers.StopAutoMove();
+                _plugin.NavigationService.StopNavigation();
                 autoMoveActive = false;
             }
         }
@@ -757,7 +757,7 @@ public class StateManager : IDisposable
         // If combat starts during looting, switch to combat
         if (Plugin.Condition[ConditionFlag.InCombat])
         {
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
             TransitionTo(BotState.DungeonCombat, $"Combat during looting on floor {dungeonFloor}!");
             return;
         }
@@ -771,7 +771,7 @@ public class StateManager : IDisposable
         if (lootObjects.Count == 0)
         {
             // No more loot - go back to InDungeon to find progression
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
             _plugin.AddDebugLog($"[Dungeon] All loot collected on floor {dungeonFloor}");
             TransitionTo(BotState.InDungeon, $"Loot done - looking for progression on floor {dungeonFloor}...");
             return;
@@ -786,19 +786,19 @@ public class StateManager : IDisposable
 
         if (dist > 3f)
         {
-            // Approach with lockon+automove
+            // Approach with vnavmesh
             Plugin.TargetManager.Target = target;
             if (!autoMoveActive)
             {
                 _plugin.AddDebugLog($"[Dungeon] Approaching loot '{targetName}' at {dist:F1}y");
-                GameHelpers.LockOnAndAutoMove();
+                _plugin.NavigationService.MoveToPosition(target.Position);
                 autoMoveActive = true;
             }
             StateDetail = $"Approaching '{targetName}' ({dist:F1}y)...";
         }
         else
         {
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
 
             // Interact every ~2 seconds
             if ((DateTime.Now - lastInteractionTime).TotalSeconds >= 2.0)
@@ -824,7 +824,7 @@ public class StateManager : IDisposable
             dungeonFloor++;
             excludedDoorEntityId = null;
             doorStuckStart = DateTime.MinValue;
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
             _plugin.AddDebugLog($"[Dungeon] Loading next room - advancing to floor {dungeonFloor}");
             TransitionTo(BotState.InDungeon, $"Entering floor {dungeonFloor}...");
             return;
@@ -845,7 +845,7 @@ public class StateManager : IDisposable
         // If combat starts, switch to combat
         if (Plugin.Condition[ConditionFlag.InCombat])
         {
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
             TransitionTo(BotState.DungeonCombat, $"Combat during progression on floor {dungeonFloor}!");
             return;
         }
@@ -858,7 +858,7 @@ public class StateManager : IDisposable
         var lootObjects = FindDungeonObjects(lootOnly: true);
         if (lootObjects.Count > 0)
         {
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
             TransitionTo(BotState.DungeonLooting, $"More loot found on floor {dungeonFloor}...");
             return;
         }
@@ -868,7 +868,7 @@ public class StateManager : IDisposable
         if (progressionObjects.Count == 0)
         {
             // Nothing to interact with - go back to scanning
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
             var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
             if (elapsed > 30)
             {
@@ -913,14 +913,14 @@ public class StateManager : IDisposable
             if (!autoMoveActive)
             {
                 _plugin.AddDebugLog($"[Dungeon] Approaching progression '{targetName}' at {dist:F1}y");
-                GameHelpers.LockOnAndAutoMove();
+                _plugin.NavigationService.MoveToPosition(target.Position);
                 autoMoveActive = true;
             }
             StateDetail = $"Approaching '{targetName}' ({dist:F1}y)...";
         }
         else
         {
-            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
 
             // Interact every ~2 seconds
             if ((DateTime.Now - lastInteractionTime).TotalSeconds >= 2.0)
@@ -951,7 +951,7 @@ public class StateManager : IDisposable
                     _plugin.AddDebugLog("[Portal] Clicked Yes on portal dialog");
                     if (autoMoveActive)
                     {
-                        GameHelpers.StopAutoMove();
+                        _plugin.NavigationService.StopNavigation();
                         autoMoveActive = false;
                     }
                     portalRetryStart = DateTime.MinValue;
@@ -977,13 +977,13 @@ public class StateManager : IDisposable
                         var portalDist = Vector3.Distance(player.Position, portal.Position);
                         if (portalDist > 3f && !autoMoveActive)
                         {
-                            _plugin.AddDebugLog($"[Portal] Lockon+automove to portal at {portalDist:F1}y");
-                            GameHelpers.LockOnAndAutoMove();
+                            _plugin.AddDebugLog($"[Portal] Navigating to portal at {portalDist:F1}y");
+                            _plugin.NavigationService.MoveToPosition(portal.Position);
                             autoMoveActive = true;
                         }
                         else if (portalDist <= 3f && autoMoveActive)
                         {
-                            GameHelpers.StopAutoMove();
+                            _plugin.NavigationService.StopNavigation();
                             autoMoveActive = false;
                         }
                     }
@@ -1020,7 +1020,7 @@ public class StateManager : IDisposable
             _plugin.AddDebugLog("[Portal] No portal found after 15s - map complete (no dungeon)");
             if (autoMoveActive)
             {
-                GameHelpers.StopAutoMove();
+                _plugin.NavigationService.StopNavigation();
                 autoMoveActive = false;
             }
             portalRetryStart = DateTime.MinValue;
@@ -1184,10 +1184,10 @@ public class StateManager : IDisposable
         dismountAttemptStart = DateTime.MinValue;
         descentInProgress = false;
 
-        // Stop automove if it was active
+        // Stop navigation if it was active
         if (autoMoveActive)
         {
-            GameHelpers.StopAutoMove();
+            _plugin.NavigationService.StopNavigation();
             autoMoveActive = false;
         }
 
