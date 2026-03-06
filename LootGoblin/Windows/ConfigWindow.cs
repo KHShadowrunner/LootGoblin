@@ -123,12 +123,6 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        var allowPillion = configuration.AllowPillionRiders;
-        if (ImGui.Checkbox("Allow Pillion Riders", ref allowPillion))
-        {
-            configuration.AllowPillionRiders = allowPillion;
-            configuration.Save();
-        }
 
         var partyTimeout = configuration.PartyWaitTimeout;
         if (ImGui.SliderInt("Party Wait Timeout (s)", ref partyTimeout, 30, 300))
@@ -184,27 +178,6 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        ImGui.Spacing();
-        ImGui.Text("Dungeon Targeting Method");
-        ImGui.SameLine();
-        ImGui.TextDisabled("(?)");
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.BeginTooltip();
-            ImGui.Text("Method 1: Current (Chat + TargetManager)");
-            ImGui.Text("Method 2: IsTargetable filter (AutoDuty pattern)");
-            ImGui.Text("Method 3: Chat command validation");
-            ImGui.EndTooltip();
-        }
-        
-        var targetingMethodNames = new[] { "Method 1: Current", "Method 2: IsTargetable", "Method 3: Chat Validation" };
-        var currentMethod = (int)configuration.SelectedTargetingMethod;
-        ImGui.SetNextItemWidth(250);
-        if (ImGui.Combo("##TargetingMethod", ref currentMethod, targetingMethodNames, targetingMethodNames.Length))
-        {
-            configuration.SelectedTargetingMethod = (TargetingMethod)currentMethod;
-            configuration.Save();
-        }
 
         ImGui.Spacing();
         ImGui.Separator();

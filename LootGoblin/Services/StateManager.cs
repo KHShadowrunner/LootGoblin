@@ -85,6 +85,8 @@ public class StateManager : IDisposable
     private DateTime mountAttemptStart = DateTime.MinValue; // Track mount retry timing
     private int mountAttempts = 0; // Track mount retry count
     private DateTime lastDungeonInteractionTime = DateTime.MinValue; // Prevent interaction spam on dungeon objects
+    private int dungeonInteractionAttemptCount = 0; // Cycle between interaction methods
+    private DateTime _lastSweepLogTime = DateTime.MinValue; // Throttle sweep log spam
     private bool previouslyInCombat = false; // Proper combat edge detection
     private bool dungeonStartNavigating; // True while navigating to dungeon start position
     private bool doorTransitionNavigating; // True while navigating through a door transition point
@@ -1349,6 +1351,17 @@ public class StateManager : IDisposable
                 }
                 else
                 {
+                    // No sweepable objects found. Before waiting, check if progression objects are already targetable.
+                    // This avoids waiting 30s for unnamed scenery that will never become targetable.
+                    var earlyProgression = GetProgressionObjects();
+                    if (earlyProgression.Count > 0)
+                    {
+                        _plugin.AddDebugLog($"[Objective] No sweep objects but {earlyProgression.Count} progression object(s) already targetable - skipping to progression");
+                        dungeonLoadWaitStart = DateTime.MinValue;
+                        currentObjective = DungeonObjective.ProcessingSpheres;
+                        break;
+                    }
+                    
                     // Check if there are untargetable objects nearby (still loading/activating)
                     int untargetableCount = CountNearbyUntargetableObjects();
                     if (untargetableCount > 0)
@@ -1605,6 +1618,7 @@ public class StateManager : IDisposable
         {
             currentCofferId = targetId;
             cofferNavigationStart = DateTime.Now;
+            dungeonInteractionAttemptCount = 0;
             _plugin.AddDebugLog($"[DungeonLooting] Now targeting '{targetName}' Kind={target.ObjectKind} at {dist:F1}y (EntityId: {targetId})");
         }
 
@@ -1666,7 +1680,30 @@ public class StateManager : IDisposable
                 GameHelpers.LockOnAndAutoMove();
                 autoMoveActive = true;
             }
-            StateDetail = $"Approaching '{targetName}' ({dist:F1}y)...";
+            
+            // ALSO attempt interaction while approaching (proven TickOpeningChest pattern)
+            // Many objects can be interacted from 4-6y range
+            if ((DateTime.Now - lastDungeonInteractionTime).TotalSeconds >= 2.0)
+            {
+                lastDungeonInteractionTime = DateTime.Now;
+                dungeonInteractionAttemptCount++;
+                Plugin.TargetManager.Target = target;
+                
+                // Cycle interaction methods for redundancy
+                if (dungeonInteractionAttemptCount % 2 == 1)
+                {
+                    // Odd attempts: TargetSystem.InteractWithObject (PandorasBox pattern)
+                    _plugin.AddDebugLog($"[DungeonLooting] Interact attempt #{dungeonInteractionAttemptCount} (TargetSystem) with '{targetName}' at {dist:F1}y");
+                    GameHelpers.InteractWithObject(target);
+                }
+                else
+                {
+                    // Even attempts: /interact command (game native)
+                    _plugin.AddDebugLog($"[DungeonLooting] Interact attempt #{dungeonInteractionAttemptCount} (/interact) with '{targetName}' at {dist:F1}y");
+                    CommandHelper.SendCommand("/interact");
+                }
+            }
+            StateDetail = $"Approaching+interacting '{targetName}' ({dist:F1}y, attempt #{dungeonInteractionAttemptCount})...";
         }
         else
         {
@@ -1685,11 +1722,22 @@ public class StateManager : IDisposable
             if ((DateTime.Now - lastDungeonInteractionTime).TotalSeconds >= 2.0)
             {
                 lastDungeonInteractionTime = DateTime.Now;
-                
-                // PandorasBox proven pattern: Set target first, then InteractWithObject
+                dungeonInteractionAttemptCount++;
                 Plugin.TargetManager.Target = target;
-                _plugin.AddDebugLog($"[DungeonLooting] Interacting with '{targetName}' Kind={target.ObjectKind} at {dist:F1}y");
-                GameHelpers.InteractWithObject(target);
+                
+                // Cycle interaction methods for redundancy
+                if (dungeonInteractionAttemptCount % 2 == 1)
+                {
+                    // Odd attempts: TargetSystem.InteractWithObject (PandorasBox pattern)
+                    _plugin.AddDebugLog($"[DungeonLooting] Interact attempt #{dungeonInteractionAttemptCount} (TargetSystem) with '{targetName}' Kind={target.ObjectKind} at {dist:F1}y");
+                    GameHelpers.InteractWithObject(target);
+                }
+                else
+                {
+                    // Even attempts: /interact command (game native)
+                    _plugin.AddDebugLog($"[DungeonLooting] Interact attempt #{dungeonInteractionAttemptCount} (/interact) with '{targetName}' at {dist:F1}y");
+                    CommandHelper.SendCommand("/interact");
+                }
                 
                 // Track progression objects for state management (but do NOT mark attempted)
                 var lower = targetName.ToLowerInvariant();
@@ -1703,124 +1751,10 @@ public class StateManager : IDisposable
                 }
             }
             
-            StateDetail = $"Interacting with '{targetName}' ({dist:F1}y, {navigationTime:F0}s)...";
+            StateDetail = $"Interacting with '{targetName}' ({dist:F1}y, attempt #{dungeonInteractionAttemptCount})...";
         }
     }
 
-    // ─── Targeting Method 1: Current (Chat + TargetManager + interact) ───
-    private void InteractMethod1_Current(IGameObject target, string targetName, uint targetId)
-    {
-        string targetCommand = GetTargetCommand(targetName);
-        
-        SendChatCommand(targetCommand);
-        Plugin.TargetManager.Target = target;
-        _plugin.AddDebugLog($"[Method1] Targeted '{targetName}' - firing interact");
-        
-        TriggerControllerModeInteract();
-        
-        PostInteractionTracking(targetName, targetId);
-    }
-
-    // ─── Targeting Method 2: IsTargetable Filter (AutoDuty pattern) ───
-    private void InteractMethod2_IsTargetable(IGameObject target, string targetName, uint targetId)
-    {
-        // Use IsObjectTargetable (TargetManager-based) — more reliable than target.IsTargetable property
-        // which gives false negatives for some objects like Arcane Sphere
-        if (!IsObjectTargetable(target))
-        {
-            _plugin.AddDebugLog($"[Method2] '{targetName}' NOT targetable (ghost/despawned) - marking attempted");
-            attemptedCoffers.Add(targetId);
-            cofferNavigationStart = DateTime.MinValue;
-            currentCofferId = 0;
-            return;
-        }
-        
-        string targetCommand = GetTargetCommand(targetName);
-        SendChatCommand(targetCommand);
-        Plugin.TargetManager.Target = target;
-        _plugin.AddDebugLog($"[Method2] Targeted '{targetName}' (IsTargetable=true) - firing interact");
-        
-        TriggerControllerModeInteract();
-        
-        PostInteractionTracking(targetName, targetId);
-    }
-
-    // ─── Targeting Method 3: Chat Command Validation ───
-    private void InteractMethod3_ChatValidation(IGameObject target, string targetName, uint targetId)
-    {
-        // Clear target, send /target command, check if game acquired it
-        Plugin.TargetManager.Target = null;
-        string targetCommand = GetTargetCommand(targetName);
-        SendChatCommand(targetCommand);
-        
-        var currentTarget = Plugin.TargetManager.Target;
-        if (currentTarget == null)
-        {
-            _plugin.AddDebugLog($"[Method3] /target failed for '{targetName}' - marking attempted");
-            attemptedCoffers.Add(targetId);
-            cofferNavigationStart = DateTime.MinValue;
-            currentCofferId = 0;
-            return;
-        }
-        
-        _plugin.AddDebugLog($"[Method3] Target validated: '{currentTarget.Name}' - firing interact");
-        
-        TriggerControllerModeInteract();
-        
-        PostInteractionTracking(targetName, targetId);
-    }
-
-    // ─── Shared Helpers for Targeting Methods ───
-    private string GetTargetCommand(string targetName)
-    {
-        return targetName.ToLowerInvariant() switch
-        {
-            var name when name.Contains("coffer") => "/target coffer",
-            var name when name.Contains("sack") => "/target sack",
-            var name when name.Contains("chest") => "/target chest",
-            var name when name.Contains("arcane") => "/target arcane",
-            var name when name.Contains("sluice") => "/target sluice",
-            _ => $"/target {targetName}"
-        };
-    }
-
-    private void PostInteractionTracking(string targetName, uint targetId)
-    {
-        // Mark object as attempted after 3s delay (gives time for despawn/reaction)
-        // The sweep will move to next object on the next tick
-        Task.Run(async () =>
-        {
-            await Task.Delay(3000);
-            if (!attemptedCoffers.Contains(targetId))
-            {
-                attemptedCoffers.Add(targetId);
-                _plugin.AddDebugLog($"[Interaction] '{targetName}' marked attempted after delay (EntityId: {targetId})");
-            }
-        });
-        
-        // Reset navigation timer for this object
-        cofferNavigationStart = DateTime.MinValue;
-        currentCofferId = 0;
-        
-        // Specific tracking for progression objects
-        var lower = targetName.ToLowerInvariant();
-        if (lower.Contains("arcane sphere"))
-        {
-            processedSpheres.Add(targetId);
-            if (!sphereInteractionTimes.ContainsKey(targetId))
-            {
-                sphereInteractionTimes[targetId] = DateTime.Now;
-                _plugin.AddDebugLog($"[Interaction] First Arcane Sphere interaction (EntityId: {targetId})");
-            }
-        }
-        else if (lower.Contains("sluice") || lower.Contains("gate") || lower.Contains("door"))
-        {
-            processedSpheres.Add(targetId);
-            _plugin.AddDebugLog($"[Interaction] Progression object '{targetName}' interaction sent (EntityId: {targetId})");
-        }
-        
-        _plugin.AddDebugLog($"[Interaction] Interaction sent for '{targetName}' - waiting for despawn or combat");
-    }
 
     private void TickDungeonProgressing()
     {
@@ -2143,14 +2077,21 @@ public class StateManager : IDisposable
                    (obj.ObjectKind == ObjectKind.Treasure || obj.ObjectKind == ObjectKind.EventObj))
             .ToList();
 
-        _plugin.AddDebugLog($"[Sweep] Scanning {allSweepable.Count} Treasure+EventObj objects in room...");
-        foreach (var obj in allSweepable.Take(15))
+        // Throttle verbose sweep logging to once per 10 seconds
+        var sweepLogNow = DateTime.Now;
+        bool shouldLogSweepDetails = (sweepLogNow - _lastSweepLogTime).TotalSeconds >= 10.0;
+        if (shouldLogSweepDetails)
         {
-            var d = Vector3.Distance(player.Position, obj.Position);
-            _plugin.AddDebugLog($"[Sweep]   '{obj.Name}' Kind={obj.ObjectKind} at {d:F1}y (ID:{obj.EntityId}, Targetable:{obj.IsTargetable})");
+            _lastSweepLogTime = sweepLogNow;
+            _plugin.AddDebugLog($"[Sweep] Scanning {allSweepable.Count} Treasure+EventObj objects in room...");
+            foreach (var obj in allSweepable.Take(10))
+            {
+                var d = Vector3.Distance(player.Position, obj.Position);
+                _plugin.AddDebugLog($"[Sweep]   '{obj.Name}' Kind={obj.ObjectKind} at {d:F1}y (ID:{obj.EntityId}, Targetable:{obj.IsTargetable})");
+            }
+            if (allSweepable.Count > 10)
+                _plugin.AddDebugLog($"[Sweep]   ... and {allSweepable.Count - 10} more");
         }
-        if (allSweepable.Count > 15)
-            _plugin.AddDebugLog($"[Sweep]   ... and {allSweepable.Count - 15} more");
 
         var candidates = allSweepable
             .Where(obj =>
@@ -2434,14 +2375,7 @@ public class StateManager : IDisposable
 
                 return true;
             })
-            .Where(obj => 
-            {
-                // Method 2: Use direct IsTargetable property (AutoDuty pattern - lightweight)
-                if (_plugin.Configuration.SelectedTargetingMethod == TargetingMethod.Method2_IsTargetable)
-                    return obj.IsTargetable;
-                // Method 1 & 3: Use TargetManager-based check
-                return IsObjectTargetable(obj);
-            })
+            .Where(obj => IsObjectTargetable(obj))
             .OrderBy(obj =>
             {
                 // Priority order: Arcane Sphere first, then by distance
@@ -2546,46 +2480,4 @@ public class StateManager : IDisposable
         _plugin.AddDebugLog($"Location set: {location.ZoneName} ({location.X:F1}, {location.Y:F1}, {location.Z:F1})");
     }
 
-    /// <summary>
-    /// Controller mode interaction sequence - exact copy of TriggerSelectIconStringClick from GameHelpers.cs.
-    /// Uses numpad2 to switch to controller mode, then numpad0 twice to interact.
-    /// </summary>
-    private static async void TriggerControllerModeInteract()
-    {
-        try
-        {
-            // Controller mode sequence: numpad2, then numpad0 twice
-            // Exact copy from GameHelpers.TriggerSelectIconStringClick
-            GameHelpers.KeyPress(VirtualKey.NUMPAD2);
-            
-            await System.Threading.Tasks.Task.Delay(200);
-            
-            GameHelpers.KeyPress(VirtualKey.NUMPAD0);
-            
-            await System.Threading.Tasks.Task.Delay(200);
-            
-            GameHelpers.KeyPress(VirtualKey.NUMPAD0);
-        }
-        catch (Exception ex)
-        {
-            Plugin.Log.Error($"[DungeonLooting] Controller mode interact failed: {ex.Message}");
-        }
-    }
-
-    private static unsafe void SendChatCommand(string command)
-    {
-        try
-        {
-            var uiModule = UIModule.Instance();
-            if (uiModule == null) return;
-            
-            var bytes = Encoding.UTF8.GetBytes(command);
-            var utf8String = Utf8String.FromSequence(bytes);
-            uiModule->ProcessChatBoxEntry(utf8String, nint.Zero);
-        }
-        catch (Exception ex)
-        {
-            // Log error if needed, but don't crash
-        }
-    }
 }

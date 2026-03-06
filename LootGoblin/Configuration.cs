@@ -4,13 +4,6 @@ using System.Collections.Generic;
 
 namespace LootGoblin;
 
-public enum TargetingMethod
-{
-    Method1_Current,
-    Method2_IsTargetable,
-    Method3_ChatValidation
-}
-
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
@@ -30,7 +23,6 @@ public class Configuration : IPluginConfiguration
     // Phase 4: Party Coordination
     public bool WaitForParty { get; set; } = true;
     public bool RequireAllMounted { get; set; } = true;
-    public bool AllowPillionRiders { get; set; } = true;
     public int PartyWaitTimeout { get; set; } = 60;
 
     // Phase 5: State Machine
@@ -45,9 +37,6 @@ public class Configuration : IPluginConfiguration
 
     // Mount Settings
     public string SelectedMount { get; set; } = "Company Chocobo";
-
-    // Targeting Methods
-    public TargetingMethod SelectedTargetingMethod { get; set; } = TargetingMethod.Method1_Current;
 
     public void Save()
     {
