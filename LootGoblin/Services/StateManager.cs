@@ -927,9 +927,8 @@ public class StateManager : IDisposable
         bool inCombat = Plugin.Condition[ConditionFlag.InCombat];
         if (inCombat)
         {
-            _plugin.AddDebugLog($"[InDungeon] Combat detected on floor {dungeonFloor} - resetting attempted coffers ({attemptedCoffers.Count})");
-            attemptedCoffers.Clear();
-            // Don't clear failed spheres - they should remain failed until chests are cleared
+            _plugin.AddDebugLog($"[InDungeon] Combat detected on floor {dungeonFloor} - preserving {attemptedCoffers.Count} attempted coffers");
+            // DO NOT clear attemptedCoffers - preserve sweep progress across combat
             cofferNavigationStart = DateTime.MinValue;
             dungeonStartNavigating = false;
             doorTransitionNavigating = false;
@@ -948,18 +947,19 @@ public class StateManager : IDisposable
             var sphere = FindArcaneSphere();
             if (sphere != null)
             {
-                // Skip spheres that have failed to trigger combat/despawn
-                if (failedSpheres.Contains(sphere.EntityId))
+                // Arcane Sphere found - transition to DungeonLooting which does sweep (chests first, THEN progression)
+                if (!failedSpheres.Contains(sphere.EntityId))
                 {
-                    _plugin.AddDebugLog($"[Dungeon] Skipping failed Arcane Sphere after territory change (EntityId: {sphere.EntityId})");
+                    _plugin.AddDebugLog($"[Dungeon] Arcane Sphere detected on entry - transitioning to DungeonLooting (sweep chests first)");
+                    dungeonStartNavigating = false;
+                    doorTransitionNavigating = false;
+                    dungeonStartChecked = true;
+                    TransitionTo(BotState.DungeonLooting, $"Looting floor {dungeonFloor} (sweep then progression)...");
+                    return;
                 }
                 else
                 {
-                    _plugin.AddDebugLog($"[Dungeon] Arcane Sphere detected - processing as progression object");
-                    dungeonStartNavigating = false;
-                    doorTransitionNavigating = false;
-                    ProcessLootTarget(sphere); // Process sphere directly
-                    return;
+                    _plugin.AddDebugLog($"[Dungeon] Skipping failed Arcane Sphere after territory change (EntityId: {sphere.EntityId})");
                 }
             }
 
@@ -1110,29 +1110,30 @@ public class StateManager : IDisposable
             }
         }
 
-        // Check for Arcane Spheres first (progression objects)
+        // Check for Arcane Spheres - if found, transition to DungeonLooting (sweep chests first)
         var progressionSphere = FindArcaneSphere();
-        if (progressionSphere != null)
+        if (progressionSphere != null && !failedSpheres.Contains(progressionSphere.EntityId))
         {
-            // Skip spheres that have failed to trigger combat/despawn
-            if (failedSpheres.Contains(progressionSphere.EntityId))
-            {
-                _plugin.AddDebugLog($"[Dungeon] Skipping failed Arcane Sphere (EntityId: {progressionSphere.EntityId})");
-            }
-            else
-            {
-                _plugin.AddDebugLog($"[Dungeon] Arcane Sphere found - processing as progression object");
-                ProcessLootTarget(progressionSphere);
-                return;
-            }
+            _plugin.AddDebugLog($"[Dungeon] Arcane Sphere found - transitioning to DungeonLooting (sweep chests first)");
+            TransitionTo(BotState.DungeonLooting, $"Looting floor {dungeonFloor} (sweep then progression)...");
+            return;
         }
 
-        // Scan for chest/coffer/sack objects (loot)
+        // Scan for chest/coffer/sack objects (loot) - includes ObjectKind.Treasure (PandorasBox pattern)
         _plugin.AddDebugLog($"[InDungeon] Scanning for chest objects on floor {dungeonFloor}...");
         var chestObjects = Plugin.ObjectTable
             .Where(obj =>
             {
-                if (obj == null || obj.ObjectKind != ObjectKind.EventObj) return false;
+                if (obj == null) return false;
+                
+                // Treasure objects (coffers/sacks) - PandorasBox pattern
+                if (obj.ObjectKind == ObjectKind.Treasure)
+                {
+                    return obj.IsTargetable && !attemptedCoffers.Contains(obj.EntityId);
+                }
+                
+                // Also check EventObj for named chests
+                if (obj.ObjectKind != ObjectKind.EventObj) return false;
                 var name = obj.Name.ToString();
                 if (string.IsNullOrEmpty(name)) return false;
                 var lower = name.ToLowerInvariant();
@@ -1144,7 +1145,7 @@ public class StateManager : IDisposable
             
         if (chestObjects.Count > 0)
         {
-            _plugin.AddDebugLog($"[InDungeon] Found {chestObjects.Count} chest object(s), transitioning to DungeonLooting");
+            _plugin.AddDebugLog($"[InDungeon] Found {chestObjects.Count} chest object(s) (Treasure+EventObj), transitioning to DungeonLooting");
             TransitionTo(BotState.DungeonLooting, $"Found {chestObjects.Count} chest object(s) on floor {dungeonFloor}...");
             return;
         }
@@ -1382,12 +1383,26 @@ public class StateManager : IDisposable
         foreach (var obj in Plugin.ObjectTable)
         {
             if (obj == null || obj.EntityId == 0) continue;
+            
+            // PandorasBox pattern: coffers are ObjectKind.Treasure
+            if (obj.ObjectKind == ObjectKind.Treasure)
+            {
+                if (!obj.IsTargetable) continue;
+                currentChestIds.Add(obj.EntityId);
+                var dist = Vector3.Distance(playerPos, obj.Position);
+                if (dist <= radius && !processedChests.Contains(obj.EntityId))
+                {
+                    chests.Add(obj);
+                }
+                continue;
+            }
+            
+            // Also check EventObj for named chests
             if (obj.ObjectKind != ObjectKind.EventObj) continue;
             
             var objName = obj.Name.ToString();
             if (string.IsNullOrEmpty(objName)) continue;
             
-            // Check for chest/coffer/sack names (using same logic as original)
             var lower = objName.ToLowerInvariant();
             bool isChest = new[] { "treasure", "coffer", "chest", "sack" }.Any(l => lower.Contains(l));
             bool isSphere = lower.Contains("arcane sphere");
@@ -1602,19 +1617,30 @@ public class StateManager : IDisposable
             {
                 lastDungeonInteractionTime = DateTime.Now;
                 
-                // Route to targeting method
-                switch (_plugin.Configuration.SelectedTargetingMethod)
+                // PandorasBox pattern: For Treasure objects, use direct TargetSystem.InteractWithObject
+                if (target.ObjectKind == ObjectKind.Treasure)
                 {
-                    case TargetingMethod.Method2_IsTargetable:
-                        InteractMethod2_IsTargetable(target, targetName, targetId);
-                        break;
-                    case TargetingMethod.Method3_ChatValidation:
-                        InteractMethod3_ChatValidation(target, targetName, targetId);
-                        break;
-                    case TargetingMethod.Method1_Current:
-                    default:
-                        InteractMethod1_Current(target, targetName, targetId);
-                        break;
+                    Plugin.TargetManager.Target = target;
+                    _plugin.AddDebugLog($"[DungeonLooting] Treasure '{targetName}' - using direct InteractWithObject (PandorasBox pattern)");
+                    GameHelpers.InteractWithObject(target);
+                    PostInteractionTracking(targetName, targetId);
+                }
+                else
+                {
+                    // EventObj: Route to targeting method
+                    switch (_plugin.Configuration.SelectedTargetingMethod)
+                    {
+                        case TargetingMethod.Method2_IsTargetable:
+                            InteractMethod2_IsTargetable(target, targetName, targetId);
+                            break;
+                        case TargetingMethod.Method3_ChatValidation:
+                            InteractMethod3_ChatValidation(target, targetName, targetId);
+                            break;
+                        case TargetingMethod.Method1_Current:
+                        default:
+                            InteractMethod1_Current(target, targetName, targetId);
+                            break;
+                    }
                 }
             }
             
@@ -1639,7 +1665,9 @@ public class StateManager : IDisposable
     // ─── Targeting Method 2: IsTargetable Filter (AutoDuty pattern) ───
     private void InteractMethod2_IsTargetable(IGameObject target, string targetName, uint targetId)
     {
-        if (!target.IsTargetable)
+        // Use IsObjectTargetable (TargetManager-based) — more reliable than target.IsTargetable property
+        // which gives false negatives for some objects like Arcane Sphere
+        if (!IsObjectTargetable(target))
         {
             _plugin.AddDebugLog($"[Method2] '{targetName}' NOT targetable (ghost/despawned) - marking attempted");
             attemptedCoffers.Add(targetId);
@@ -2036,8 +2064,8 @@ public class StateManager : IDisposable
     // ─── Room Sweep Methods (brute-force object interaction) ─────────────────
 
     /// <summary>
-    /// Returns ALL targetable EventObj objects in the room, excluding progression/exit objects.
-    /// This is the "ritual sweep" - walk to each object and try to interact.
+    /// Returns ALL targetable loot objects in the room: Treasure (coffers/sacks) + non-progression EventObj.
+    /// PandorasBox pattern: coffers are ObjectKind.Treasure, NOT EventObj.
     /// Objects that can't be interacted with will timeout and be marked attempted.
     /// </summary>
     private List<IGameObject> GetRoomSweepObjects()
@@ -2049,39 +2077,47 @@ public class StateManager : IDisposable
         var excludePartial = new[] { "sluice", "arcane sphere", "teleportation portal" };
         var excludeExact = new[] { "exit" };
 
-        var allEventObjs = Plugin.ObjectTable
-            .Where(obj => obj != null && obj.ObjectKind == ObjectKind.EventObj)
+        // Scan BOTH Treasure (coffers/sacks) AND EventObj (non-progression interactables)
+        var allSweepable = Plugin.ObjectTable
+            .Where(obj => obj != null && 
+                   (obj.ObjectKind == ObjectKind.Treasure || obj.ObjectKind == ObjectKind.EventObj))
             .ToList();
 
-        _plugin.AddDebugLog($"[Sweep] Scanning {allEventObjs.Count} EventObj objects in room...");
-        foreach (var obj in allEventObjs.Take(10))
+        _plugin.AddDebugLog($"[Sweep] Scanning {allSweepable.Count} Treasure+EventObj objects in room...");
+        foreach (var obj in allSweepable.Take(15))
         {
             var d = Vector3.Distance(player.Position, obj.Position);
-            _plugin.AddDebugLog($"[Sweep]   '{obj.Name}' at {d:F1}y (ID:{obj.EntityId}, Targetable:{obj.IsTargetable})");
+            _plugin.AddDebugLog($"[Sweep]   '{obj.Name}' Kind={obj.ObjectKind} at {d:F1}y (ID:{obj.EntityId}, Targetable:{obj.IsTargetable})");
         }
-        if (allEventObjs.Count > 10)
-            _plugin.AddDebugLog($"[Sweep]   ... and {allEventObjs.Count - 10} more");
+        if (allSweepable.Count > 15)
+            _plugin.AddDebugLog($"[Sweep]   ... and {allSweepable.Count - 15} more");
 
-        var candidates = allEventObjs
+        var candidates = allSweepable
             .Where(obj =>
             {
+                // Treasure objects (coffers/sacks) are ALWAYS included in sweep
+                if (obj.ObjectKind == ObjectKind.Treasure)
+                {
+                    var dist = Vector3.Distance(player.Position, obj.Position);
+                    if (dist > 50f) return false;
+                    if (attemptedCoffers.Contains(obj.EntityId)) return false;
+                    return true;
+                }
+
+                // EventObj: filter out progression/exit/empty names
                 var name = obj.Name.ToString();
                 if (string.IsNullOrEmpty(name)) return false;
-                var dist = Vector3.Distance(player.Position, obj.Position);
-                if (dist > 50f) return false;
+                var edist = Vector3.Distance(player.Position, obj.Position);
+                if (edist > 50f) return false;
 
                 var lower = name.ToLowerInvariant();
-
-                // Skip progression/exit objects (saved for ProcessingSpheres phase)
                 if (excludePartial.Any(p => lower.Contains(p))) return false;
                 if (excludeExact.Any(e => lower == e)) return false;
-
-                // Skip already attempted objects
                 if (attemptedCoffers.Contains(obj.EntityId)) return false;
 
                 return true;
             })
-            .Where(obj => obj.IsTargetable) // Only targetable objects (filters ghosts)
+            .Where(obj => obj.IsTargetable) // Only targetable objects (filters ghosts/opened)
             .OrderBy(obj => Vector3.Distance(player.Position, obj.Position))
             .ToList();
 
@@ -2089,7 +2125,7 @@ public class StateManager : IDisposable
         foreach (var obj in candidates)
         {
             var d = Vector3.Distance(player.Position, obj.Position);
-            _plugin.AddDebugLog($"[Sweep]   → '{obj.Name}' at {d:F1}y (ID:{obj.EntityId})");
+            _plugin.AddDebugLog($"[Sweep]   → '{obj.Name}' Kind={obj.ObjectKind} at {d:F1}y (ID:{obj.EntityId})");
         }
 
         return candidates;
@@ -2203,37 +2239,43 @@ public class StateManager : IDisposable
         var sphereName = "arcane sphere";
         var doorNames = new[] { "door", "gate", "sphere" }; // Partial matching for doors (Sluice Gate, etc)
 
-        // Log all EventObj objects for debugging
-        var allEventObjs = Plugin.ObjectTable
-            .Where(obj => obj != null && obj.ObjectKind == ObjectKind.EventObj)
+        // Log all Treasure + EventObj objects for debugging
+        var allDungeonObjs = Plugin.ObjectTable
+            .Where(obj => obj != null && (obj.ObjectKind == ObjectKind.Treasure || obj.ObjectKind == ObjectKind.EventObj))
             .ToList();
         
-        _plugin.AddDebugLog($"[Dungeon] Found {allEventObjs.Count} EventObj objects total");
-        foreach (var obj in allEventObjs.Take(10)) // Limit to first 10 to avoid spam
+        _plugin.AddDebugLog($"[Dungeon] Found {allDungeonObjs.Count} Treasure+EventObj objects total");
+        foreach (var obj in allDungeonObjs.Take(10))
         {
             var dist = Vector3.Distance(player.Position, obj.Position);
-            _plugin.AddDebugLog($"[Dungeon]   EventObj: '{obj.Name}' at {dist:F1}y (EntityId: {obj.EntityId})");
+            _plugin.AddDebugLog($"[Dungeon]   {obj.ObjectKind}: '{obj.Name}' at {dist:F1}y (EntityId: {obj.EntityId}, Targetable: {obj.IsTargetable})");
         }
-        if (allEventObjs.Count > 10)
+        if (allDungeonObjs.Count > 10)
         {
-            _plugin.AddDebugLog($"[Dungeon]   ... and {allEventObjs.Count - 10} more EventObj objects");
+            _plugin.AddDebugLog($"[Dungeon]   ... and {allDungeonObjs.Count - 10} more objects");
         }
 
         // First pass: find all UNOPENED loot objects within 50y for door priority check
+        // Includes ObjectKind.Treasure (PandorasBox pattern) + EventObj named chests
         var allLoot = Plugin.ObjectTable
             .Where(obj =>
             {
-                if (obj == null || obj.ObjectKind != ObjectKind.EventObj) return false;
+                if (obj == null) return false;
+                var dist = Vector3.Distance(player.Position, obj.Position);
+                if (dist > 50f) return false;
+                
+                // Treasure objects are always loot
+                if (obj.ObjectKind == ObjectKind.Treasure)
+                    return obj.IsTargetable && !attemptedCoffers.Contains(obj.EntityId);
+                
+                if (obj.ObjectKind != ObjectKind.EventObj) return false;
                 var name = obj.Name.ToString();
                 if (string.IsNullOrEmpty(name)) return false;
-                var dist = Vector3.Distance(player.Position, obj.Position);
-                if (dist > 50f) return false; // Check within 50y for door priority
                 
                 var lower = name.ToLowerInvariant();
                 bool isLoot = lower.Contains(sphereName) || lootNames.Any(l => lower.Contains(l));
                 if (!isLoot) return false;
                 
-                // Skip loot we've already attempted (opened/empty chests)
                 return !attemptedCoffers.Contains(obj.EntityId);
             })
             .ToList();
@@ -2254,13 +2296,17 @@ public class StateManager : IDisposable
             .Where(obj =>
             {
                 if (obj == null) return false;
+                var dist = Vector3.Distance(player.Position, obj.Position);
+                if (dist > 50f) return false;
+
+                // Include Treasure objects (coffers/sacks) when looking for loot
+                if (obj.ObjectKind == ObjectKind.Treasure)
+                    return lootOnly && obj.IsTargetable && !attemptedCoffers.Contains(obj.EntityId);
+
+                // EventObj type (interactive dungeon objects)
+                if (obj.ObjectKind != ObjectKind.EventObj) return false;
                 var name = obj.Name.ToString();
                 if (string.IsNullOrEmpty(name)) return false;
-                var dist = Vector3.Distance(player.Position, obj.Position);
-                if (dist > 50f) return false; // 50y interaction range
-
-                // Only EventObj type (interactive dungeon objects)
-                if (obj.ObjectKind != ObjectKind.EventObj) return false;
 
                 // Skip the teleportation portal (handled separately)
                 if (name == "Teleportation Portal") return false;
