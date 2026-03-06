@@ -1545,26 +1545,16 @@ public class StateManager : IDisposable
         var targetName = target.Name.ToString();
         var targetId = target.EntityId;
 
-        _plugin.AddDebugLog($"[DungeonLooting] Processing target '{targetName}' at {dist:F1}y (EntityId: {targetId})");
+        _plugin.AddDebugLog($"[DungeonLooting] Processing '{targetName}' Kind={target.ObjectKind} at {dist:F1}y (EntityId: {targetId})");
 
-        // Validate targetability (quick check)
-        if (!IsObjectTargetable(target))
-        {
-            _plugin.AddDebugLog($"[DungeonLooting] '{targetName}' not targetable - skipping");
-            return; // Will try next object on next tick
-        }
-
-        // Always set target
-        Plugin.TargetManager.Target = target;
-        
-        // Track which chest we're working on (preserved during combat)
+        // Track which object we're working on (preserved during combat)
         if (currentCofferId != targetId)
         {
             currentCofferId = targetId;
-            _plugin.AddDebugLog($"[DungeonLooting] Now working on chest '{targetName}' (EntityId: {targetId})");
+            _plugin.AddDebugLog($"[DungeonLooting] Now working on '{targetName}' (EntityId: {targetId}, Kind: {target.ObjectKind})");
         }
         
-        // Start navigation timer if not already started for this coffer
+        // Start navigation timer if not already started for this object
         if (cofferNavigationStart == DateTime.MinValue)
         {
             cofferNavigationStart = DateTime.Now;
@@ -1617,31 +1607,13 @@ public class StateManager : IDisposable
             {
                 lastDungeonInteractionTime = DateTime.Now;
                 
-                // PandorasBox pattern: For Treasure objects, use direct TargetSystem.InteractWithObject
-                if (target.ObjectKind == ObjectKind.Treasure)
-                {
-                    Plugin.TargetManager.Target = target;
-                    _plugin.AddDebugLog($"[DungeonLooting] Treasure '{targetName}' - using direct InteractWithObject (PandorasBox pattern)");
-                    GameHelpers.InteractWithObject(target);
-                    PostInteractionTracking(targetName, targetId);
-                }
-                else
-                {
-                    // EventObj: Route to targeting method
-                    switch (_plugin.Configuration.SelectedTargetingMethod)
-                    {
-                        case TargetingMethod.Method2_IsTargetable:
-                            InteractMethod2_IsTargetable(target, targetName, targetId);
-                            break;
-                        case TargetingMethod.Method3_ChatValidation:
-                            InteractMethod3_ChatValidation(target, targetName, targetId);
-                            break;
-                        case TargetingMethod.Method1_Current:
-                        default:
-                            InteractMethod1_Current(target, targetName, targetId);
-                            break;
-                    }
-                }
+                // PandorasBox proven pattern: Use TargetSystem.InteractWithObject for ALL objects
+                // Works for both ObjectKind.Treasure (coffers/sacks) and EventObj (arcane sphere, etc.)
+                // No Method1/2/3 branching needed - direct API is the most reliable
+                Plugin.TargetManager.Target = target;
+                _plugin.AddDebugLog($"[DungeonLooting] Interacting with '{targetName}' Kind={target.ObjectKind} via InteractWithObject");
+                GameHelpers.InteractWithObject(target);
+                PostInteractionTracking(targetName, targetId);
             }
             
             StateDetail = $"Interacting with '{targetName}'...";
