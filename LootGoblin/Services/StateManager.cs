@@ -2241,7 +2241,7 @@ public class StateManager : IDisposable
         var player = Plugin.ObjectTable.LocalPlayer;
         if (player == null) return new List<IGameObject>();
 
-        var progressionPartial = new[] { "sluice", "arcane sphere", "door", "gate", "high", "low" };
+        var progressionPartial = new[] { "sluice", "arcane sphere", "door", "gate", "high", "low", "exit" };
         // Exclude loot-sounding names that might false-match (e.g. "Sluice Gate" is progression, not "Treasure Coffer")
         var excludePartial = new[] { "treasure", "coffer", "chest", "sack", "teleportation portal" };
 
@@ -2429,6 +2429,7 @@ public class StateManager : IDisposable
                 bool isLoot = lootNames.Any(l => lower.Contains(l));
                 if (!isLoot) return false;
                 
+                if (!obj.IsTargetable) return false; // Must be targetable (opened coffers have IsTargetable=false)
                 return !attemptedCoffers.Contains(obj.EntityId);
             })
             .ToList();
@@ -2484,7 +2485,7 @@ public class StateManager : IDisposable
                 bool isDoor = doorNames.Any(d => lower.Contains(d));
 
                 if (lootOnly)
-                    return isLoot; // Only actual loot (treasure/coffer/chest/sack), NOT sphere
+                    return isLoot && obj.IsTargetable; // Only actual targetable loot (opened coffers have IsTargetable=false)
 
                 // For progression: return doors/gates, but NOT if loot exists within 50y
                 if (isSphere || isLoot) return false;

@@ -18,6 +18,12 @@ Living document tracking what works, what doesn't, and lessons learned.
 - Stuck detection every 10s: re-pathfind if moved <5y (proven TickFlying pattern)
 - Party mount wait before flying
 
+### ⚠️ Party Mount Wait Fix: Members not in zone were not counted
+- **Symptom:** Bot flew off with 3/4 party after teleporting — 4th member hadn't loaded into zone yet
+- **Root cause:** `PartyService.UpdatePartyStatus()` iterated `_partyList` but only added members found in `_objectTable`. Members still loading into the zone were not in `_objectTable`, so they were silently skipped. With only 3 members tracked, `AllMembersMounted=true` prematurely.
+- **Fix:** Members not found in ObjectTable are now added as `IsMounted=false, IsInSameZone=false, IsReady=false`. This ensures `AllMembersMounted` stays false until ALL party members are in the zone and mounted.
+- **Key rule:** Always use `_partyList` for total member count. `_objectTable` only shows objects in the current zone.
+
 ### Digging
 - **Status:** Working
 - `/gaction dig` after dismount
@@ -136,6 +142,17 @@ All 5 fixes confirmed working. See `LootGoblinLearningRouletteDungeons.md` for f
 - **Fix 1:** `DungeonProgressing` resets `currentObjective = ClearingChests` when loot found
 - **Fix 2:** `ProcessingSpheres` calls `FindDungeonObjects(lootOnly:true)` before targeting progression — if loot exists, goes back to `ClearingChests`
 - **Key learning:** Treasure Coffers can spawn AFTER the initial sweep completes (late object table population)
+
+### ⚠️ Canal of Uznair Bug Fix 2: Opened coffer infinite loop (ClearingChests ↔ ProcessingSpheres)
+- **Symptom:** After opening the room chest and clearing combat, bot loops forever between `ClearingChests` (0 sweep) and `ProcessingSpheres` (sees 1 loot → back to ClearingChests)
+- **Root cause:** Opened EventObj coffer (ID 1073742525) had `obj.IsTargetable=false` but `IsObjectTargetable()` (TargetManager-based) returned `true`. `GetRoomSweepObjects()` uses `obj.IsTargetable` → correctly excluded. `FindDungeonObjects(lootOnly:true)` uses `IsObjectTargetable()` → false positive → returned as loot.
+- **Fix:** Added `obj.IsTargetable` check in `FindDungeonObjects` for EventObj loot (both `allLoot` scan and `candidates` filter). Now both methods agree on targetability.
+- **Key rule:** `obj.IsTargetable` and `IsObjectTargetable()` can disagree for opened/used objects. For loot detection, always require `obj.IsTargetable=true`.
+
+### Exit Object Not Targeted (Roulette Final Floor)
+- **Symptom:** After completing the final floor of a roulette map, bot failed to target and path to the "Exit" object.
+- **Root cause:** `GetRoomSweepObjects()` excludes "exit" (line: `excludeExact = new[] { "exit" }`), but `GetProgressionObjects()` did NOT include "exit" in its match list. The Exit object fell through both phases.
+- **Fix:** Added `"exit"` to `GetProgressionObjects()` `progressionPartial` array. Exit is now treated as a progression object alongside doors and sluice gates.
 
 ---
 

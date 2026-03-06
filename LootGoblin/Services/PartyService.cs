@@ -80,20 +80,35 @@ public class PartyService : IDisposable
         // Add local player
         PartyMembers.Add(CreatePartyMember(localPlayer, localPlayer));
 
-        // Add party members from object table
+        // Add party members from party list (includes ALL members regardless of zone)
         for (int i = 0; i < _partyList.Length; i++)
         {
             var member = _partyList[i];
             if (member == null) continue;
+            if (member.Name.TextValue == localPlayer.Name.TextValue) continue; // Skip self (already added)
 
-            // Find object in object table by name
+            // Try to find in object table (only visible if in same zone)
+            bool found = false;
             foreach (var obj in _objectTable)
             {
                 if (obj != null && obj.Name.TextValue == member.Name.TextValue && obj.Address != localPlayer.Address)
                 {
                     PartyMembers.Add(CreatePartyMember(obj, localPlayer));
+                    found = true;
                     break;
                 }
+            }
+            
+            // Not in object table = not in zone yet. Add as unmounted so we wait for them.
+            if (!found)
+            {
+                PartyMembers.Add(new PartyMember
+                {
+                    Name = member.Name.TextValue,
+                    IsMounted = false,
+                    IsInSameZone = false,
+                    IsReady = false,
+                });
             }
         }
 
