@@ -77,6 +77,9 @@ public class NavigationService : IDisposable
 
     public void FlyToPosition(Vector3 position)
     {
+        // Re-check availability in case vnavmesh loaded after LootGoblin startup
+        _plugin.VNavIPC.CheckAvailability();
+        
         if (!_plugin.VNavIPC.IsAvailable)
         {
             SetState(NavigationState.Error, "vnavmesh not available.");
@@ -90,6 +93,9 @@ public class NavigationService : IDisposable
 
     public void MoveToPosition(Vector3 position)
     {
+        // Re-check availability in case vnavmesh loaded after LootGoblin startup
+        _plugin.VNavIPC.CheckAvailability();
+        
         if (!_plugin.VNavIPC.IsAvailable)
         {
             SetState(NavigationState.Error, "vnavmesh not available.");
@@ -129,6 +135,9 @@ public class NavigationService : IDisposable
 
     public void FlyToFlag()
     {
+        // Re-check availability in case vnavmesh loaded after LootGoblin startup
+        _plugin.VNavIPC.CheckAvailability();
+        
         if (!_plugin.VNavIPC.IsAvailable)
         {
             SetState(NavigationState.Error, "vnavmesh not available.");
