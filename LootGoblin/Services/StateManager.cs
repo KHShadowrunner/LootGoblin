@@ -65,6 +65,8 @@ public class StateManager : IDisposable
     private DateTime forwardMovementStart = DateTime.MinValue; // When we started moving forward after territory change
     private uint lastGlobalTerritoryId; // Track territory changes globally for map refresh
     private DateTime chestDisappearedTime = DateTime.MinValue; // Track when chest first disappeared for grace period
+    private DateTime chestApproachStart = DateTime.MinValue; // When we started approaching chest (stuck detection)
+    private float chestApproachLastDist = 0f; // Distance when we started approaching (stuck detection)
     private HashSet<uint> attemptedCoffers = new HashSet<uint>(); // Track which coffers we've tried to interact with
     private DateTime cofferNavigationStart = DateTime.MinValue; // When we started navigating to current coffer
     private uint currentCofferId = 0; // Track which chest we're currently working on (preserved during combat)
@@ -741,7 +743,9 @@ public class StateManager : IDisposable
             if (autoMoveActive)
             {
                 GameHelpers.StopAutoMove();
+                _plugin.NavigationService.StopNavigation();
                 autoMoveActive = false;
+                chestApproachStart = DateTime.MinValue;
                 _plugin.AddDebugLog($"[OpeningChest] Combat detected - stopped automove, clearing target");
             }
             // Clear target so player can fight freely
@@ -758,12 +762,28 @@ public class StateManager : IDisposable
         
         if (dist > range)
         {
-            // Use lockon+automove for short-range chest approach
             if (!autoMoveActive)
             {
                 _plugin.AddDebugLog($"[OpeningChest] Coffer '{chestName}' at {dist:F1}y - lockon+automove");
                 GameHelpers.LockOnAndAutoMove();
                 autoMoveActive = true;
+                chestApproachStart = now;
+                chestApproachLastDist = dist;
+            }
+            else
+            {
+                // Stuck detection: if we've been approaching for 5s+ and haven't closed 2y, use vnavmesh
+                var approachElapsed = (now - chestApproachStart).TotalSeconds;
+                if (approachElapsed >= 5.0 && dist >= chestApproachLastDist - 2f)
+                {
+                    _plugin.AddDebugLog($"[OpeningChest] Stuck at {dist:F1}y for {approachElapsed:F0}s (was {chestApproachLastDist:F1}y) - switching to vnavmesh");
+                    GameHelpers.StopAutoMove();
+                    autoMoveActive = false;
+                    _plugin.NavigationService.MoveToPosition(chest.Position);
+                    autoMoveActive = true;
+                    chestApproachStart = now;
+                    chestApproachLastDist = dist;
+                }
             }
             StateDetail = $"Approaching '{chestName}' ({dist:F1}y away)...";
         }
@@ -773,8 +793,10 @@ public class StateManager : IDisposable
             if (autoMoveActive)
             {
                 GameHelpers.StopAutoMove();
+                _plugin.NavigationService.StopNavigation();
                 autoMoveActive = false;
             }
+            chestApproachStart = DateTime.MinValue;
         }
 
         // Continually try to interact every ~1 second (only when NOT in combat)
@@ -1398,6 +1420,16 @@ public class StateManager : IDisposable
                 break;
                 
             case DungeonObjective.ProcessingSpheres:
+                // Before targeting progression, double-check for loot that may have spawned late
+                var lateLoot = FindDungeonObjects(lootOnly: true);
+                if (lateLoot.Count > 0)
+                {
+                    _plugin.AddDebugLog($"[Objective] Found {lateLoot.Count} loot object(s) while in ProcessingSpheres - going back to ClearingChests");
+                    currentObjective = DungeonObjective.ClearingChests;
+                    dungeonLoadWaitStart = DateTime.MinValue;
+                    break; // Re-enter switch on next tick as ClearingChests
+                }
+                
                 // Look for progression: Sluice Gate, Arcane Sphere, doors (High/Low)
                 var progressionObjects = GetProgressionObjects();
                 if (progressionObjects.Count > 0 && canCheckFailedObjects)
@@ -1867,6 +1899,9 @@ public class StateManager : IDisposable
         if (lootObjects.Count > 0)
         {
             if (autoMoveActive) { _plugin.NavigationService.StopNavigation(); autoMoveActive = false; }
+            currentObjective = DungeonObjective.ClearingChests; // Reset so sweep finds the new loot
+            dungeonLoadWaitStart = DateTime.MinValue;
+            _plugin.AddDebugLog($"[DungeonProgressing] Found {lootObjects.Count} loot object(s) - resetting to ClearingChests sweep");
             TransitionTo(BotState.DungeonLooting, $"More loot found on floor {dungeonFloor}...");
             return;
         }

@@ -24,11 +24,12 @@ Living document tracking what works, what doesn't, and lessons learned.
 - Retry dig if combat interrupts before chest spawns
 
 ### Overworld Chest Interaction
-- **Status:** Working
+- **Status:** Working (with stuck detection fix)
 - `ChestDetectionService.FindNearestCoffer()` + `lockon+automove`
 - `TargetSystem.InteractWithObject()` every 2s
 - `ClickYesIfVisible()` for dialogs
 - Combat detection: stop automove, clear target, wait for combat end
+- **Fix applied:** Stuck detection — if lockon+automove doesn't close 2y in 5s, switches to vnavmesh navigation
 
 ### Portal Detection & Interaction
 - **Status:** Working
@@ -88,26 +89,21 @@ Living document tracking what works, what doesn't, and lessons learned.
 
 ---
 
-## Phase 5: Post-Roulette (After Arcane Sphere) — 🔧 FIXED (untested)
+## Phase 5: Post-Roulette (After Arcane Sphere) — ✅ WORKING (confirmed in territory 794)
 
-### Previous Bugs Found
-1. **`CountNearbyUntargetableProgressionObjects()` counted used Arcane Sphere** — Didn't filter by `attemptedCoffers`/`processedSpheres`. The used sphere (now untargetable) caused a false 30s wait.
-2. **No transition to `DungeonProgressing` after sphere used** — `ProcessingSpheres` waited for untargetable objects instead of transitioning to door-finding state.
-3. **`GetProgressionObjects()` only matched "sluice" and "arcane sphere"** — Didn't find doors named "door", "gate", "high", "low".
-4. **`FindDungeonObjects()` skipped unnamed objects** — In territory 794, all objects except Arcane Sphere are unnamed (`""`), so doors couldn't be found.
-5. **No loading screen detection in `TickDungeonLooting`** — Floor transitions triggered by roulette weren't detected.
+All 5 fixes confirmed working. See `LootGoblinLearningRouletteDungeons.md` for full log analysis.
 
-### Fixes Applied
-1. `CountNearbyUntargetableProgressionObjects()` now filters out `attemptedCoffers` and `processedSpheres`
+### Fixes Applied (all confirmed)
+1. `CountNearbyUntargetableProgressionObjects()` filters out `attemptedCoffers`/`processedSpheres`
 2. `ProcessingSpheres` detects sphere was used → transitions to `DungeonProgressing`
 3. `GetProgressionObjects()` expanded to include "door", "gate", "high", "low"
 4. `FindDungeonObjects()` includes unnamed targetable EventObj within 30y as potential doors
-5. `TickDungeonLooting` checks `BetweenAreas` for floor transitions (same as `TickDungeonProgressing`)
-6. All timeout/wait failures now transition to `DungeonProgressing` (broader search) instead of `HeadingToExit`
+5. `TickDungeonLooting` checks `BetweenAreas` for floor transitions
+6. All timeout/wait failures transition to `DungeonProgressing` instead of `HeadingToExit`
 
 ---
 
-## Phase 6: Door Interaction (`TickDungeonProgressing`) — 🔧 EXISTS (untested)
+## Phase 6: Door Interaction (`TickDungeonProgressing`) — ✅ WORKING (roulette), 🔧 FIXED (canal)
 
 ### Logic
 - `FindDungeonObjects(lootOnly: false)` finds doors
@@ -125,6 +121,14 @@ Living document tracking what works, what doesn't, and lessons learned.
 ### Ejection Detection
 - `!BoundByDuty` during progression → ejected (wrong door RNG)
 - Transitions to `Completed` state
+
+### Canal of Uznair Bug Fix (loot priority)
+- **Bug:** Bot beelined to Sluice Gate before looting Treasure Coffer
+- **Root cause 1:** `DungeonProgressing → DungeonLooting` transition didn't reset `currentObjective` to `ClearingChests` — sweep never re-ran
+- **Root cause 2:** `ProcessingSpheres` didn't check for loot before targeting progression objects
+- **Fix 1:** `DungeonProgressing` resets `currentObjective = ClearingChests` when loot found
+- **Fix 2:** `ProcessingSpheres` calls `FindDungeonObjects(lootOnly:true)` before targeting progression — if loot exists, goes back to `ClearingChests`
+- **Key learning:** Treasure Coffers can spawn AFTER the initial sweep completes (late object table population)
 
 ---
 
@@ -171,9 +175,10 @@ ClearingChests (sweep coffers/sacks) → ProcessingSpheres (Arcane Sphere/doors)
 ## Known Territories
 | Territory ID | Name | Notes |
 |---|---|---|
+| 612 | The Fringes | Overworld dig location (Seemingly Special maps) |
 | 620 | The Peaks | Overworld dig location |
-| 712 | Unknown dungeon | Named objects (High, Low, Shortcut). Start: <0.02, 149.80, 388.27> |
-| 794 | Unknown dungeon | ALL objects unnamed except Arcane Sphere |
+| 712 | Canals of Uznair | Room-based dungeon. Named objects (High, Low, Shortcut, Sluice Gate). Start: <0.02, 149.80, 388.27>. Treasure Coffer spawns late. |
+| 794 | Unknown roulette dungeon | ALL objects unnamed except Arcane Sphere. Roulette confirmed 100% working. |
 
 ---
 
