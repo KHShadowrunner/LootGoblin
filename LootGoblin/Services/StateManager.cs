@@ -80,6 +80,7 @@ public class StateManager : IDisposable
     private DateTime lastCombatEndTime = DateTime.MinValue;
     private const float OBJECTIVE_SEARCH_RADIUS = 80f;
     private const int COMBAT_FREE_WAIT_SECONDS = 5;
+    private DateTime dungeonLoadWaitStart = DateTime.MinValue; // Wait for objects to become targetable on entry
 
     private DateTime mountAttemptStart = DateTime.MinValue; // Track mount retry timing
     private int mountAttempts = 0; // Track mount retry count
@@ -238,6 +239,7 @@ public class StateManager : IDisposable
             
             // Reset objective tracking
             currentObjective = DungeonObjective.ClearingChests;
+            dungeonLoadWaitStart = DateTime.MinValue;
             processedChests.Clear();
             processedSpheres.Clear();
             failedObjects.Clear();
@@ -730,18 +732,19 @@ public class StateManager : IDisposable
         
         if (inCombat)
         {
-            // In combat - stop navigation and clear target so we're not chained to chest
+            // In combat - stop movement and clear target so we're not chained to chest
             if (autoMoveActive)
             {
-                _plugin.NavigationService.StopNavigation();
+                GameHelpers.StopAutoMove();
                 autoMoveActive = false;
+                _plugin.AddDebugLog($"[OpeningChest] Combat detected - stopped automove, clearing target");
             }
             // Clear target so player can fight freely
             if (Plugin.TargetManager.Target?.Name.ToString() == chestName)
             {
                 Plugin.TargetManager.Target = null;
             }
-            StateDetail = $"In combat - waiting for combat to end...";
+            StateDetail = $"In combat - waiting ({dist:F1}y from '{chestName}')...";
             return;
         }
 
@@ -840,6 +843,7 @@ public class StateManager : IDisposable
         
         // ALWAYS reset to chest priority after combat
         currentObjective = DungeonObjective.ClearingChests;
+        dungeonLoadWaitStart = DateTime.MinValue;
         
         _plugin.AddDebugLog("[Combat] Combat ended - will clear processed objects in 5s");
     }
@@ -1340,13 +1344,40 @@ public class StateManager : IDisposable
                 var sweepObjects = GetRoomSweepObjects();
                 if (sweepObjects.Count > 0)
                 {
+                    dungeonLoadWaitStart = DateTime.MinValue; // Reset wait timer - we have objects
                     ProcessLootTarget(sweepObjects[0]);
                 }
                 else
                 {
-                    // All objects swept - move to progression
-                    currentObjective = DungeonObjective.ProcessingSpheres;
-                    _plugin.AddDebugLog("[Objective] Room sweep complete - moving to progression");
+                    // Check if there are untargetable objects nearby (still loading/activating)
+                    int untargetableCount = CountNearbyUntargetableObjects();
+                    if (untargetableCount > 0)
+                    {
+                        // Objects exist but aren't targetable yet - WAIT
+                        if (dungeonLoadWaitStart == DateTime.MinValue)
+                        {
+                            dungeonLoadWaitStart = DateTime.Now;
+                            _plugin.AddDebugLog($"[Objective] Found {untargetableCount} untargetable objects - waiting for them to load...");
+                        }
+                        var waitTime = (DateTime.Now - dungeonLoadWaitStart).TotalSeconds;
+                        if (waitTime > 30.0)
+                        {
+                            _plugin.AddDebugLog($"[Objective] Waited {waitTime:F0}s for objects to load - giving up, moving to progression");
+                            dungeonLoadWaitStart = DateTime.MinValue;
+                            currentObjective = DungeonObjective.ProcessingSpheres;
+                        }
+                        else
+                        {
+                            StateDetail = $"Waiting for dungeon objects to activate ({waitTime:F0}/30s)...";
+                        }
+                    }
+                    else
+                    {
+                        // Truly no objects - move to progression
+                        dungeonLoadWaitStart = DateTime.MinValue;
+                        currentObjective = DungeonObjective.ProcessingSpheres;
+                        _plugin.AddDebugLog("[Objective] Room sweep complete - moving to progression");
+                    }
                 }
                 break;
                 
@@ -1355,13 +1386,39 @@ public class StateManager : IDisposable
                 var progressionObjects = GetProgressionObjects();
                 if (progressionObjects.Count > 0 && canCheckFailedObjects)
                 {
+                    dungeonLoadWaitStart = DateTime.MinValue;
                     ProcessLootTarget(progressionObjects[0]);
                 }
                 else
                 {
-                    // No progression objects - head to exit
-                    currentObjective = DungeonObjective.HeadingToExit;
-                    _plugin.AddDebugLog("[Objective] No progression objects found - heading to exit");
+                    // Check if progression objects exist but aren't targetable
+                    int untargetableProgression = CountNearbyUntargetableProgressionObjects();
+                    if (untargetableProgression > 0)
+                    {
+                        if (dungeonLoadWaitStart == DateTime.MinValue)
+                        {
+                            dungeonLoadWaitStart = DateTime.Now;
+                            _plugin.AddDebugLog($"[Objective] Found {untargetableProgression} untargetable progression objects - waiting...");
+                        }
+                        var waitTime = (DateTime.Now - dungeonLoadWaitStart).TotalSeconds;
+                        if (waitTime > 30.0)
+                        {
+                            _plugin.AddDebugLog($"[Objective] Waited {waitTime:F0}s for progression objects - giving up");
+                            dungeonLoadWaitStart = DateTime.MinValue;
+                            currentObjective = DungeonObjective.HeadingToExit;
+                        }
+                        else
+                        {
+                            StateDetail = $"Waiting for progression objects to activate ({waitTime:F0}/30s)...";
+                        }
+                    }
+                    else
+                    {
+                        // No progression objects at all - head to exit
+                        dungeonLoadWaitStart = DateTime.MinValue;
+                        currentObjective = DungeonObjective.HeadingToExit;
+                        _plugin.AddDebugLog("[Objective] No progression objects found - heading to exit");
+                    }
                 }
                 break;
                 
@@ -1957,6 +2014,7 @@ public class StateManager : IDisposable
                     
                     // Reset objective tracking for new dungeon
                     currentObjective = DungeonObjective.ClearingChests;
+                    dungeonLoadWaitStart = DateTime.MinValue;
                     processedChests.Clear();
                     processedSpheres.Clear();
                     failedObjects.Clear();
@@ -2164,6 +2222,45 @@ public class StateManager : IDisposable
             .Where(obj => obj.IsTargetable)
             .OrderBy(obj => Vector3.Distance(player.Position, obj.Position))
             .ToList();
+    }
+
+    /// <summary>
+    /// Counts nearby Treasure/EventObj objects that exist but are NOT targetable.
+    /// Used to detect objects still loading on dungeon entry.
+    /// </summary>
+    private int CountNearbyUntargetableObjects()
+    {
+        var player = Plugin.ObjectTable.LocalPlayer;
+        if (player == null) return 0;
+
+        return Plugin.ObjectTable.Count(obj =>
+            obj != null &&
+            (obj.ObjectKind == ObjectKind.Treasure || obj.ObjectKind == ObjectKind.EventObj) &&
+            !obj.IsTargetable &&
+            Vector3.Distance(player.Position, obj.Position) <= 50f);
+    }
+
+    /// <summary>
+    /// Counts nearby progression objects (Arcane Sphere, Sluice Gate) that exist but are NOT targetable.
+    /// </summary>
+    private int CountNearbyUntargetableProgressionObjects()
+    {
+        var player = Plugin.ObjectTable.LocalPlayer;
+        if (player == null) return 0;
+
+        var progressionPartial = new[] { "sluice", "arcane sphere" };
+
+        return Plugin.ObjectTable.Count(obj =>
+        {
+            if (obj == null || obj.ObjectKind != ObjectKind.EventObj) return false;
+            if (obj.IsTargetable) return false; // Already targetable = handled by GetProgressionObjects
+            var name = obj.Name.ToString();
+            if (string.IsNullOrEmpty(name)) return false;
+            var dist = Vector3.Distance(player.Position, obj.Position);
+            if (dist > 50f) return false;
+            var lower = name.ToLowerInvariant();
+            return progressionPartial.Any(p => lower.Contains(p));
+        });
     }
 
     // ─── Dungeon Helpers ─────────────────────────────────────────────────────
