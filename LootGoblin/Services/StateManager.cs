@@ -2389,7 +2389,7 @@ public class StateManager : IDisposable
         // Priority: Arcane Sphere, then loot (treasure/coffer/chest/sack), then progression (doors/gates)
         var lootNames = new[] { "treasure", "coffer", "chest", "sack" };
         var sphereName = "arcane sphere";
-        var doorNames = new[] { "door", "gate", "sphere" }; // Partial matching for doors (Sluice Gate, etc)
+        var doorNames = new[] { "door", "gate" }; // Partial matching for doors (Sluice Gate, etc)
 
         // Log all Treasure + EventObj objects for debugging
         var allDungeonObjs = Plugin.ObjectTable
@@ -2425,7 +2425,8 @@ public class StateManager : IDisposable
                 if (string.IsNullOrEmpty(name)) return false;
                 
                 var lower = name.ToLowerInvariant();
-                bool isLoot = lower.Contains(sphereName) || lootNames.Any(l => lower.Contains(l));
+                // Only actual loot names count - Arcane Sphere is progression, NOT loot
+                bool isLoot = lootNames.Any(l => lower.Contains(l));
                 if (!isLoot) return false;
                 
                 return !attemptedCoffers.Contains(obj.EntityId);
@@ -2483,7 +2484,7 @@ public class StateManager : IDisposable
                 bool isDoor = doorNames.Any(d => lower.Contains(d));
 
                 if (lootOnly)
-                    return isSphere || isLoot; // Sphere counts as loot priority
+                    return isLoot; // Only actual loot (treasure/coffer/chest/sack), NOT sphere
 
                 // For progression: return doors/gates, but NOT if loot exists within 50y
                 if (isSphere || isLoot) return false;

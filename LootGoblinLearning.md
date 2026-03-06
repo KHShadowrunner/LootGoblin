@@ -101,6 +101,13 @@ All 5 fixes confirmed working. See `LootGoblinLearningRouletteDungeons.md` for f
 5. `TickDungeonLooting` checks `BetweenAreas` for floor transitions
 6. All timeout/wait failures transition to `DungeonProgressing` instead of `HeadingToExit`
 
+### ⚠️ Regression Fixed: Arcane Sphere classified as loot (infinite loop)
+- **Symptom:** Bot entered roulette dungeon (territory 794) and looped forever at floor 1 without ever interacting with Arcane Sphere
+- **Cause:** `FindDungeonObjects(lootOnly=true)` returned Arcane Sphere because line `return isSphere || isLoot` treated sphere as loot. The `ProcessingSpheres` loot-priority check (added for Canal fix) called this method, saw the sphere as "loot", reset to `ClearingChests`, which found nothing sweepable, went back to `ProcessingSpheres`, checked for loot again → infinite loop every 0.5s.
+- **Fix:** `FindDungeonObjects(lootOnly=true)` now returns `isLoot` only (Treasure objects + named chests/coffers/sacks). Arcane Sphere is **progression**, NOT loot.
+- **Also fixed:** Removed `"sphere"` from `doorNames` array — Arcane Sphere is already handled by dedicated `isSphere` check.
+- **Key rule: Arcane Sphere is `ObjectKind.EventObj` and is a PROGRESSION object. It must NEVER be classified as loot.**
+
 ---
 
 ## Phase 6: Door Interaction (`TickDungeonProgressing`) — ✅ WORKING (roulette), 🔧 FIXED (canal)
@@ -177,8 +184,9 @@ ClearingChests (sweep coffers/sacks) → ProcessingSpheres (Arcane Sphere/doors)
 |---|---|---|
 | 612 | The Fringes | Overworld dig location (Seemingly Special maps) |
 | 620 | The Peaks | Overworld dig location |
+| 621 | The Lochs | Overworld dig location (Seemingly Special maps, confirmed working) |
 | 712 | Canals of Uznair | Room-based dungeon. Named objects (High, Low, Shortcut, Sluice Gate). Start: <0.02, 149.80, 388.27>. Treasure Coffer spawns late. |
-| 794 | Unknown roulette dungeon | ALL objects unnamed except Arcane Sphere. Roulette confirmed 100% working. |
+| 794 | Unknown roulette dungeon | ALL objects unnamed except Arcane Sphere. Roulette confirmed working (regression fixed). |
 
 ---
 
