@@ -1407,6 +1407,29 @@ public class StateManager : IDisposable
                 }
                 else
                 {
+                    // Check if we already used an Arcane Sphere on this floor
+                    // If so, transition to DungeonProgressing which handles door finding
+                    bool sphereWasUsed = attemptedCoffers.Any(id =>
+                    {
+                        var obj = Plugin.ObjectTable.FirstOrDefault(o => o != null && o.EntityId == id);
+                        if (obj == null)
+                        {
+                            // Object gone from table - check processedSpheres
+                            return processedSpheres.Contains(id);
+                        }
+                        var name = obj.Name.ToString().ToLowerInvariant();
+                        return name.Contains("arcane sphere") || name.Contains("sluice");
+                    }) || processedSpheres.Count > 0;
+                    
+                    if (sphereWasUsed)
+                    {
+                        _plugin.AddDebugLog("[Objective] Sphere/progression already used - transitioning to DungeonProgressing for door handling");
+                        dungeonLoadWaitStart = DateTime.MinValue;
+                        if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+                        TransitionTo(BotState.DungeonProgressing, $"Finding doors on floor {dungeonFloor}...");
+                        return;
+                    }
+                    
                     // Check if progression objects exist but aren't targetable
                     int untargetableProgression = CountNearbyUntargetableProgressionObjects();
                     if (untargetableProgression > 0)
@@ -1419,9 +1442,10 @@ public class StateManager : IDisposable
                         var waitTime = (DateTime.Now - dungeonLoadWaitStart).TotalSeconds;
                         if (waitTime > 30.0)
                         {
-                            _plugin.AddDebugLog($"[Objective] Waited {waitTime:F0}s for progression objects - giving up");
+                            _plugin.AddDebugLog($"[Objective] Waited {waitTime:F0}s for progression objects - transitioning to DungeonProgressing");
                             dungeonLoadWaitStart = DateTime.MinValue;
-                            currentObjective = DungeonObjective.HeadingToExit;
+                            TransitionTo(BotState.DungeonProgressing, $"Finding doors on floor {dungeonFloor}...");
+                            return;
                         }
                         else
                         {
@@ -1430,10 +1454,11 @@ public class StateManager : IDisposable
                     }
                     else
                     {
-                        // No progression objects at all - head to exit
+                        // No progression objects at all - try DungeonProgressing (has broader search)
                         dungeonLoadWaitStart = DateTime.MinValue;
-                        currentObjective = DungeonObjective.HeadingToExit;
-                        _plugin.AddDebugLog("[Objective] No progression objects found - heading to exit");
+                        _plugin.AddDebugLog("[Objective] No progression objects found - transitioning to DungeonProgressing");
+                        TransitionTo(BotState.DungeonProgressing, $"Finding doors on floor {dungeonFloor}...");
+                        return;
                     }
                 }
                 break;
@@ -1564,7 +1589,15 @@ public class StateManager : IDisposable
                        Plugin.Condition[ConditionFlag.BetweenAreas51];
         if (loading)
         {
-            StateDetail = "Loading...";
+            // Loading screen during looting = floor transition (roulette/door triggered it)
+            dungeonFloor++;
+            excludedDoorEntityId = null;
+            doorStuckStart = DateTime.MinValue;
+            currentObjective = DungeonObjective.ClearingChests;
+            dungeonLoadWaitStart = DateTime.MinValue;
+            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            _plugin.AddDebugLog($"[DungeonLooting] Loading screen detected - advancing to floor {dungeonFloor}");
+            TransitionTo(BotState.InDungeon, $"Entering floor {dungeonFloor}...");
             return;
         }
 
@@ -2173,7 +2206,9 @@ public class StateManager : IDisposable
         var player = Plugin.ObjectTable.LocalPlayer;
         if (player == null) return new List<IGameObject>();
 
-        var progressionPartial = new[] { "sluice", "arcane sphere" };
+        var progressionPartial = new[] { "sluice", "arcane sphere", "door", "gate", "high", "low" };
+        // Exclude loot-sounding names that might false-match (e.g. "Sluice Gate" is progression, not "Treasure Coffer")
+        var excludePartial = new[] { "treasure", "coffer", "chest", "sack", "teleportation portal" };
 
         return Plugin.ObjectTable
             .Where(obj =>
@@ -2185,6 +2220,7 @@ public class StateManager : IDisposable
                 if (dist > 50f) return false;
 
                 var lower = name.ToLowerInvariant();
+                if (excludePartial.Any(p => lower.Contains(p))) return false;
                 if (!progressionPartial.Any(p => lower.Contains(p))) return false;
 
                 // Skip already attempted
@@ -2193,7 +2229,14 @@ public class StateManager : IDisposable
                 return true;
             })
             .Where(obj => obj.IsTargetable)
-            .OrderBy(obj => Vector3.Distance(player.Position, obj.Position))
+            .OrderBy(obj =>
+            {
+                // Priority: Arcane Sphere first, then Sluice Gate, then doors by distance
+                var name = obj.Name.ToString().ToLowerInvariant();
+                if (name.Contains("arcane sphere")) return 0;
+                if (name.Contains("sluice")) return 1;
+                return 2 + (int)Vector3.Distance(player.Position, obj.Position);
+            })
             .ToList();
     }
 
@@ -2227,6 +2270,8 @@ public class StateManager : IDisposable
         {
             if (obj == null || obj.ObjectKind != ObjectKind.EventObj) return false;
             if (obj.IsTargetable) return false; // Already targetable = handled by GetProgressionObjects
+            if (attemptedCoffers.Contains(obj.EntityId)) return false; // Already used/attempted
+            if (processedSpheres.Contains(obj.EntityId)) return false; // Already processed
             var name = obj.Name.ToString();
             if (string.IsNullOrEmpty(name)) return false;
             var dist = Vector3.Distance(player.Position, obj.Position);
@@ -2378,10 +2423,24 @@ public class StateManager : IDisposable
                 // EventObj type (interactive dungeon objects)
                 if (obj.ObjectKind != ObjectKind.EventObj) return false;
                 var name = obj.Name.ToString();
-                if (string.IsNullOrEmpty(name)) return false;
-
+                
                 // Skip the teleportation portal (handled separately)
                 if (name == "Teleportation Portal") return false;
+                
+                // Exclude any door we gave up on (stuck)
+                if (excludedDoorEntityId.HasValue && obj.EntityId == excludedDoorEntityId.Value)
+                    return false;
+
+                // Handle unnamed EventObj: potential doors in some dungeons (e.g. territory 794)
+                // Only include unnamed objects for progression (not loot), within 30y, and targetable
+                if (string.IsNullOrEmpty(name))
+                {
+                    if (lootOnly) return false; // Unnamed objects are never loot
+                    if (dist > 30f) return false; // Tighter radius for unnamed objects
+                    if (attemptedCoffers.Contains(obj.EntityId)) return false;
+                    if (hasNearbyLoot) return false; // Don't pick doors while loot exists
+                    return true; // Unnamed targetable EventObj = likely a door
+                }
 
                 var lower = name.ToLowerInvariant();
                 bool isSphere = lower.Contains(sphereName);
@@ -2400,10 +2459,6 @@ public class StateManager : IDisposable
                     _plugin.AddDebugLog($"[Dungeon] Skipping door '{name}' - loot within 50y");
                     return false;
                 }
-                
-                // Exclude any door we gave up on (stuck)
-                if (excludedDoorEntityId.HasValue && obj.EntityId == excludedDoorEntityId.Value)
-                    return false;
 
                 return true;
             })
