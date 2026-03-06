@@ -84,6 +84,7 @@ public class StateManager : IDisposable
     private DateTime mountAttemptStart = DateTime.MinValue; // Track mount retry timing
     private int mountAttempts = 0; // Track mount retry count
     private DateTime lastDungeonInteractionTime = DateTime.MinValue; // Prevent interaction spam on dungeon objects
+    private bool previouslyInCombat = false; // Proper combat edge detection
     private bool dungeonStartNavigating; // True while navigating to dungeon start position
     private bool doorTransitionNavigating; // True while navigating through a door transition point
     private bool dungeonStartChecked; // True once we've evaluated dungeon start on first entry
@@ -178,18 +179,18 @@ public class StateManager : IDisposable
         
         // Combat start/end tracking for objective system
         bool currentlyInCombat = Plugin.Condition[ConditionFlag.InCombat];
-        bool wasInCombat = lastCombatEndTime != DateTime.MinValue;
         
-        if (currentlyInCombat && !wasInCombat)
+        if (currentlyInCombat && !previouslyInCombat)
         {
             // Combat just started
             OnCombatStart();
         }
-        else if (!currentlyInCombat && wasInCombat)
+        else if (!currentlyInCombat && previouslyInCombat)
         {
             // Combat just ended
             OnCombatEnd();
         }
+        previouslyInCombat = currentlyInCombat;
 
         switch (State)
         {
@@ -1529,11 +1530,8 @@ public class StateManager : IDisposable
         if (player == null) return;
 
         // NEW OBJECTIVE SYSTEM: Sequential processing with priority hierarchy
-        // Only process objectives every 3 seconds to prevent spam
-        if ((DateTime.Now - lastDungeonInteractionTime).TotalSeconds >= 3.0)
-        {
-            ProcessDungeonObjectives();
-        }
+        // Called every tick - ProcessLootTarget has its own 2s interaction cooldown
+        ProcessDungeonObjectives();
     }
 
     private void ProcessLootTarget(IGameObject target)
@@ -1545,20 +1543,24 @@ public class StateManager : IDisposable
         var targetName = target.Name.ToString();
         var targetId = target.EntityId;
 
-        _plugin.AddDebugLog($"[DungeonLooting] Processing '{targetName}' Kind={target.ObjectKind} at {dist:F1}y (EntityId: {targetId})");
-
         // Track which object we're working on (preserved during combat)
         if (currentCofferId != targetId)
         {
             currentCofferId = targetId;
-            _plugin.AddDebugLog($"[DungeonLooting] Now working on '{targetName}' (EntityId: {targetId}, Kind: {target.ObjectKind})");
-        }
-        
-        // Start navigation timer if not already started for this object
-        if (cofferNavigationStart == DateTime.MinValue)
-        {
             cofferNavigationStart = DateTime.Now;
-            _plugin.AddDebugLog($"[DungeonLooting] Starting navigation to '{targetName}' (EntityId: {targetId})");
+            _plugin.AddDebugLog($"[DungeonLooting] Now targeting '{targetName}' Kind={target.ObjectKind} at {dist:F1}y (EntityId: {targetId})");
+        }
+
+        // Check if object became untargetable (interaction succeeded - it despawned/opened)
+        if (!target.IsTargetable)
+        {
+            _plugin.AddDebugLog($"[DungeonLooting] '{targetName}' is no longer targetable - interaction succeeded!");
+            attemptedCoffers.Add(targetId);
+            cofferNavigationStart = DateTime.MinValue;
+            currentCofferId = 0;
+            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
+            if (_plugin.NavigationService.State == NavigationState.Flying) _plugin.NavigationService.StopNavigation();
+            return;
         }
 
         // Check timeout (15s per object - marks attempted and moves to next)
@@ -1569,16 +1571,19 @@ public class StateManager : IDisposable
             attemptedCoffers.Add(targetId);
             cofferNavigationStart = DateTime.MinValue;
             currentCofferId = 0;
-            if (autoMoveActive) { CommandHelper.SendCommand("/automove off"); autoMoveActive = false; }
+            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
             if (_plugin.NavigationService.State == NavigationState.Flying) _plugin.NavigationService.StopNavigation();
             return;
         }
         
-        // NAVIGATION LOGIC: Use vnavmesh for distant objects, stop at 6y for interaction
+        // NAVIGATION + INTERACTION using proven OpeningChest pattern:
+        // >6y: vnavmesh navigation
+        // 3-6y: lockon+automove approach (vnavmesh can't path closer)
+        // <3y: stop movement, interact
         if (dist > 6f)
         {
             // Stop any existing automove before starting vnavmesh navigation
-            if (autoMoveActive) { CommandHelper.SendCommand("/automove off"); autoMoveActive = false; }
+            if (autoMoveActive) { GameHelpers.StopAutoMove(); autoMoveActive = false; }
             
             // Use vnavmesh to navigate to distant objects
             if (_plugin.NavigationService.State != NavigationState.Flying)
@@ -1588,35 +1593,60 @@ public class StateManager : IDisposable
             }
             StateDetail = $"Navigating to '{targetName}' ({dist:F1}y, {navigationTime:F0}s)...";
         }
+        else if (dist > 3f)
+        {
+            // 3-6y: Stop vnavmesh, use lockon+automove to close the gap (proven pattern)
+            if (_plugin.NavigationService.State == NavigationState.Flying)
+            {
+                _plugin.NavigationService.StopNavigation();
+                _plugin.AddDebugLog($"[DungeonLooting] Stopped vnavmesh at {dist:F1}y - using lockon+automove to approach '{targetName}'");
+            }
+            
+            // Lockon+automove approach (same as OpeningChest proven pattern)
+            Plugin.TargetManager.Target = target;
+            if (!autoMoveActive)
+            {
+                GameHelpers.LockOnAndAutoMove();
+                autoMoveActive = true;
+            }
+            StateDetail = $"Approaching '{targetName}' ({dist:F1}y)...";
+        }
         else
         {
-            // Within 6y - stop ALL navigation and interact
+            // Within 3y - stop ALL movement and interact
             if (autoMoveActive)
             {
-                CommandHelper.SendCommand("/automove off");
+                GameHelpers.StopAutoMove();
                 autoMoveActive = false;
             }
             if (_plugin.NavigationService.State == NavigationState.Flying)
             {
                 _plugin.NavigationService.StopNavigation();
-                _plugin.AddDebugLog($"[DungeonLooting] Stopped navigation at {dist:F1}y - attempting interaction with '{targetName}'");
             }
 
-            // Interact every 2 seconds
+            // Interact every 2 seconds (continuous retry until despawn or timeout)
             if ((DateTime.Now - lastDungeonInteractionTime).TotalSeconds >= 2.0)
             {
                 lastDungeonInteractionTime = DateTime.Now;
                 
-                // PandorasBox proven pattern: Use TargetSystem.InteractWithObject for ALL objects
-                // Works for both ObjectKind.Treasure (coffers/sacks) and EventObj (arcane sphere, etc.)
-                // No Method1/2/3 branching needed - direct API is the most reliable
+                // PandorasBox proven pattern: Set target first, then InteractWithObject
                 Plugin.TargetManager.Target = target;
-                _plugin.AddDebugLog($"[DungeonLooting] Interacting with '{targetName}' Kind={target.ObjectKind} via InteractWithObject");
+                _plugin.AddDebugLog($"[DungeonLooting] Interacting with '{targetName}' Kind={target.ObjectKind} at {dist:F1}y");
                 GameHelpers.InteractWithObject(target);
-                PostInteractionTracking(targetName, targetId);
+                
+                // Track progression objects for state management (but do NOT mark attempted)
+                var lower = targetName.ToLowerInvariant();
+                if (lower.Contains("arcane sphere"))
+                {
+                    processedSpheres.Add(targetId);
+                }
+                else if (lower.Contains("sluice") || lower.Contains("gate") || lower.Contains("door"))
+                {
+                    processedSpheres.Add(targetId);
+                }
             }
             
-            StateDetail = $"Interacting with '{targetName}'...";
+            StateDetail = $"Interacting with '{targetName}' ({dist:F1}y, {navigationTime:F0}s)...";
         }
     }
 

@@ -31,40 +31,32 @@ public class VNavIPC : IDisposable
     {
         try
         {
-            var installedPlugins = _pluginInterface.InstalledPlugins.ToList();
-            _plugin.AddDebugLog($"[VNavIPC] Checking availability - found {installedPlugins.Count} total plugins");
             IsAvailable = false;
             
-            foreach (var p in installedPlugins)
+            foreach (var p in _pluginInterface.InstalledPlugins)
             {
-                _plugin.AddDebugLog($"[VNavIPC] Plugin: '{p.InternalName}' (Loaded: {p.IsLoaded}, Version: {p.Version})");
-                
                 if (string.Equals(p.InternalName, "vnavmesh", StringComparison.OrdinalIgnoreCase))
                 {
-                    _plugin.AddDebugLog($"[VNavIPC] Found vnavmesh plugin - IsLoaded: {p.IsLoaded}");
-                    
                     if (p.IsLoaded)
                     {
                         IsAvailable = true;
-                        _plugin.AddDebugLog($"[VNavIPC] vnavmesh: Available (matched '{p.InternalName}')");
-                        break;
                     }
                     else
                     {
-                        _plugin.AddDebugLog($"[VNavIPC] vnavmesh found but not loaded yet");
+                        _plugin.AddDebugLog($"[VNavIPC] vnavmesh found but not loaded");
                     }
+                    break;
                 }
             }
 
             if (!IsAvailable)
             {
-                _plugin.AddDebugLog($"[VNavIPC] vnavmesh: Not available after checking {installedPlugins.Count} plugins");
+                _plugin.AddDebugLog($"[VNavIPC] vnavmesh not available");
             }
         }
         catch (Exception ex)
         {
             _log.Error($"Error checking vnavmesh: {ex.Message}");
-            _plugin.AddDebugLog($"[VNavIPC] Exception during availability check: {ex.Message}");
             IsAvailable = false;
         }
     }
