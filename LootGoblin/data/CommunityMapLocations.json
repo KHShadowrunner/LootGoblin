@@ -1146,5 +1146,19 @@
     "RecordedAt": "2026-03-07 19:55:59",
     "TerritoryId": 154,
     "ZoneName": "North Shroud"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": -460.3,
+    "FlagY": 22.8,
+    "FlagZ": -474.6,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Goatskin Map",
+    "RealX": -465.9,
+    "RealY": 23,
+    "RealZ": -474.6,
+    "RecordedAt": "2026-03-07 19:59:18",
+    "TerritoryId": 140,
+    "ZoneName": "Western Thanalan"
   }
 ]
