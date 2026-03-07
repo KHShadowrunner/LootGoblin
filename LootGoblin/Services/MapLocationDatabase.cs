@@ -45,7 +45,8 @@ public class MapLocationDatabase
     private List<MapLocationEntry> _treasureSpotEntries = new();
 
     // GitHub raw URL for community data file
-    public const string CommunityDataUrl = "https://raw.githubusercontent.com/McVaxius/LootGoblin/master/LootGoblin/data/CommunityMapLocations.json";
+    //public const string CommunityDataUrl = "https://raw.githubusercontent.com/McVaxius/LootGoblin/master/LootGoblin/data/CommunityMapLocations.json";
+    public const string CommunityDataUrl = "https://raw.githubusercontent.com/McVaxius/LootGoblin/refs/heads/master/LootGoblin/data/CommunityMapLocations.json";
 
     public bool IsDownloading { get; private set; }
     public string? LastDownloadResult { get; private set; }
