@@ -1160,5 +1160,47 @@
     "RecordedAt": "2026-03-07 19:59:18",
     "TerritoryId": 140,
     "ZoneName": "Western Thanalan"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": 160.6,
+    "FlagY": 49.6,
+    "FlagZ": 113.5,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Goatskin Map",
+    "RealX": 157.2,
+    "RealY": 51.4,
+    "RealZ": 111.5,
+    "RecordedAt": "2026-03-07 20:00:42",
+    "TerritoryId": 140,
+    "ZoneName": "Western Thanalan"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": -39.1,
+    "FlagY": 26.8,
+    "FlagZ": -414.4,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Goatskin Map",
+    "RealX": -28.8,
+    "RealY": 27.2,
+    "RealZ": -416.1,
+    "RecordedAt": "2026-03-07 20:01:45",
+    "TerritoryId": 141,
+    "ZoneName": "Central Thanalan"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": -271.5,
+    "FlagY": 20.9,
+    "FlagZ": -58.8,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Goatskin Map",
+    "RealX": -271.6,
+    "RealY": 23.6,
+    "RealZ": -61.9,
+    "RecordedAt": "2026-03-07 20:03:04",
+    "TerritoryId": 141,
+    "ZoneName": "Central Thanalan"
   }
 ]
