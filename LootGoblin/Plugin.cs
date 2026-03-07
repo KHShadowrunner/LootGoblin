@@ -83,6 +83,10 @@ public sealed class Plugin : IDalamudPlugin
 
         // Initialize map location database
         MapLocationDatabase = new MapLocationDatabase(this, Log);
+        MapLocationDatabase.PopulateFromTreasureSpot(DataManager);
+
+        // Auto-update community data on login
+        ClientState.Login += OnLogin;
 
         // Initialize state machine
         StateManager = new StateManager(this, Framework, Log);
@@ -162,7 +166,18 @@ public sealed class Plugin : IDalamudPlugin
             Log.Error($"Failed to uninstall ECommons callback hook: {ex.Message}");
         }
 
+        ClientState.Login -= OnLogin;
+
         Log.Information("===Loot Goblin unloaded!===");
+    }
+
+    private void OnLogin()
+    {
+        if (Configuration.AutoUpdateLocOnLogin)
+        {
+            AddDebugLog("[MapLocDB] Auto-updating community data on login...");
+            _ = MapLocationDatabase.DownloadCommunityDataAsync();
+        }
     }
 
     private void OnCommand(string command, string args)

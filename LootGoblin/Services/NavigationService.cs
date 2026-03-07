@@ -166,6 +166,29 @@ public class NavigationService : IDisposable
 
             _plugin.AddDebugLog($"[Aetheryte] Searching territory {territoryId}, target=({targetPosition.X:F1}, {targetPosition.Y:F1}, {targetPosition.Z:F1}), teleport list count={count}");
 
+            // Get Map data for MapMarker coordinate conversion
+            float sizeFactor = 100f;
+            float offsetX = 0f, offsetY = 0f;
+            uint mapId = 0;
+            try
+            {
+                var territoryTypeSheet = _dataManager.GetExcelSheet<TerritoryType>();
+                if (territoryTypeSheet != null)
+                {
+                    var territory = territoryTypeSheet.GetRow(territoryId);
+                    var mapRow = territory.Map.Value;
+                    mapId = territory.Map.RowId;
+                    sizeFactor = mapRow.SizeFactor;
+                    offsetX = mapRow.OffsetX;
+                    offsetY = mapRow.OffsetY;
+                    _plugin.AddDebugLog($"[Aetheryte] Map: ID={mapId} SizeFactor={sizeFactor} Offset=({offsetX},{offsetY})");
+                }
+            }
+            catch (Exception ex)
+            {
+                _plugin.AddDebugLog($"[Aetheryte] Map lookup failed: {ex.GetType().Name}: {ex.Message}");
+            }
+
             // Collect all candidate aetherytes in the target territory
             var candidates = new System.Collections.Generic.List<(uint Id, string Name, uint Cost, Vector3 WorldPos)>();
 
@@ -180,41 +203,28 @@ public class NavigationService : IDisposable
 
                 var name = aetheryte.PlaceName.ValueNullable?.Name.ToString() ?? $"ID {entry.AetheryteId}";
 
-                // Try to get world position from Level sheet
+                // Try Method 1: Level sheet (known to return null in many cases)
                 var worldPos = Vector3.Zero;
                 try
                 {
-                    int levelCount = 0;
                     foreach (var lvl in aetheryte.Level)
                     {
-                        levelCount++;
                         var levelRow = lvl.ValueNullable;
                         if (levelRow != null)
                         {
                             var lx = levelRow.Value.X;
                             var ly = levelRow.Value.Y;
                             var lz = levelRow.Value.Z;
-                            _plugin.AddDebugLog($"  [Level] {name}: Level[{levelCount-1}] RowId={lvl.RowId} XYZ=({lx:F1}, {ly:F1}, {lz:F1})");
-                            if (lx != 0 || lz != 0) // Take first entry with non-zero coords
+                            if (lx != 0 || lz != 0)
                             {
                                 worldPos = new Vector3(lx, ly, lz);
+                                _plugin.AddDebugLog($"  [Level] {name}: OK ({lx:F1}, {ly:F1}, {lz:F1})");
                                 break;
                             }
                         }
-                        else
-                        {
-                            _plugin.AddDebugLog($"  [Level] {name}: Level[{levelCount-1}] RowId={lvl.RowId} -> null");
-                        }
                     }
-                    if (levelCount == 0)
-                        _plugin.AddDebugLog($"  [Level] {name}: Level collection was EMPTY (0 entries)");
-                    if (worldPos == Vector3.Zero && levelCount > 0)
-                        _plugin.AddDebugLog($"  [Level] {name}: iterated {levelCount} entries but no valid position found");
                 }
-                catch (Exception ex)
-                {
-                    _plugin.AddDebugLog($"  [Level] {name}: EXCEPTION {ex.GetType().Name}: {ex.Message}");
-                }
+                catch { }
 
                 candidates.Add((entry.AetheryteId, name, entry.GilCost, worldPos));
             }
@@ -225,7 +235,67 @@ public class NavigationService : IDisposable
                 return 0;
             }
 
-            // Log all candidates
+            // Method 2: MapMarker fallback for candidates with no position
+            if (mapId > 0 && candidates.Any(c => c.WorldPos == Vector3.Zero))
+            {
+                try
+                {
+                    var mapMarkerSheet = _dataManager.GetSubrowExcelSheet<MapMarker>();
+                    var candidateIds = candidates.Where(c => c.WorldPos == Vector3.Zero).Select(c => c.Id).ToHashSet();
+
+                    for (ushort subIdx = 0; subIdx < 200; subIdx++)
+                    {
+                        if (candidateIds.Count == 0) break;
+
+                        var marker = mapMarkerSheet.GetSubrowOrDefault(mapId, subIdx);
+                        if (marker == null) break;
+
+                        var dataKey = marker.Value.DataKey.RowId;
+                        if (!candidateIds.Contains(dataKey)) continue;
+
+                        // Convert MapMarker position to world coordinates
+                        // MapMarker X/Y are in scaled map pixel space
+                        float c = sizeFactor / 100.0f;
+                        float worldX = ((float)marker.Value.X / c - 1024.0f) / c + offsetX;
+                        float worldZ = ((float)marker.Value.Y / c - 1024.0f) / c + offsetY;
+                        var convertedPos = new Vector3(worldX, 0, worldZ);
+
+                        // Update the candidate
+                        for (int j = 0; j < candidates.Count; j++)
+                        {
+                            if (candidates[j].Id == dataKey && candidates[j].WorldPos == Vector3.Zero)
+                            {
+                                candidates[j] = (candidates[j].Id, candidates[j].Name, candidates[j].Cost, convertedPos);
+                                _plugin.AddDebugLog($"  [MapMarker] {candidates[j].Name}: raw=({marker.Value.X},{marker.Value.Y}) DataType={marker.Value.DataType} → world=({worldX:F1}, 0, {worldZ:F1})");
+                                candidateIds.Remove(dataKey);
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _plugin.AddDebugLog($"[Aetheryte] MapMarker fallback: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            // Method 3: Check MapLocationDatabase for aetheryte name override
+            if (_plugin.MapLocationDatabase != null && targetPosition != default)
+            {
+                var dbEntry = _plugin.MapLocationDatabase.FindEntry(territoryId, targetPosition.X, targetPosition.Z);
+                if (dbEntry != null && !string.IsNullOrEmpty(dbEntry.AetheryteName))
+                {
+                    var overrideCandidate = candidates.FirstOrDefault(c =>
+                        string.Equals(c.Name, dbEntry.AetheryteName, StringComparison.OrdinalIgnoreCase));
+                    if (overrideCandidate.Id != 0)
+                    {
+                        _plugin.AddDebugLog($"[Aetheryte] DB override: using {dbEntry.AetheryteName} (ID: {overrideCandidate.Id})");
+                        return overrideCandidate.Id;
+                    }
+                }
+            }
+
+            // Log all candidates with final positions
             foreach (var c in candidates)
             {
                 var posStr = c.WorldPos != Vector3.Zero ? $"({c.WorldPos.X:F1}, {c.WorldPos.Y:F1}, {c.WorldPos.Z:F1})" : "NO_POS";
@@ -257,7 +327,7 @@ public class NavigationService : IDisposable
                 var cheapest = candidates.OrderBy(c => c.Cost).First();
                 bestId = cheapest.Id;
                 bestName = cheapest.Name;
-                _plugin.AddDebugLog($"[Aetheryte] FALLBACK cheapest: {bestName} (ID: {bestId}, Cost: {cheapest.Cost}g) [no position data available]");
+                _plugin.AddDebugLog($"[Aetheryte] FALLBACK cheapest: {bestName} (ID: {bestId}, Cost: {cheapest.Cost}g) [no position data]");
             }
 
             return bestId;

@@ -551,15 +551,25 @@ public class StateManager : IDisposable
             return;
         }
 
+        // Minimum wait after teleport command to allow animation to start and complete
+        // Without this, same-zone teleports transition instantly because BetweenAreas hasn't been set yet
+        var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
+        if (elapsed < 5.0)
+        {
+            StateDetail = $"Teleporting... ({elapsed:F0}s)";
+            return;
+        }
+
         // Check if teleport finished (no longer between areas and in correct territory)
         if (!nav.IsTeleporting())
         {
             var currentTerritory = Plugin.ClientState.TerritoryType;
             if (CurrentLocation != null && currentTerritory == CurrentLocation.TerritoryId)
             {
+                _plugin.AddDebugLog($"[Teleporting] Arrived after {elapsed:F1}s");
                 TransitionTo(BotState.Mounting, "Arrived! Mounting up...");
             }
-            else if ((DateTime.Now - stateStartTime).TotalSeconds > 10)
+            else if (elapsed > 15)
             {
                 HandleError($"Wrong territory after teleport: {currentTerritory} (expected {CurrentLocation?.TerritoryId}).");
             }
@@ -651,7 +661,7 @@ public class StateManager : IDisposable
             // Check MapLocationDatabase for a stored real XYZ for this flag position
             var dbEntry = _plugin.MapLocationDatabase.FindEntry(CurrentLocation.TerritoryId, CurrentLocation.X, CurrentLocation.Z);
             Vector3 flyTarget;
-            if (dbEntry != null)
+            if (dbEntry != null && dbEntry.HasRealXYZ)
             {
                 // Use stored real position from previous successful dig
                 flyTarget = new Vector3(dbEntry.RealX, dbEntry.RealY, dbEntry.RealZ);
@@ -661,7 +671,7 @@ public class StateManager : IDisposable
             {
                 // No stored location - use Y+50 altitude boost as temporary fallback
                 flyTarget = new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
-                _plugin.AddDebugLog($"[Flying] No DB entry - using Y+50 fallback: ground ({CurrentLocation.X:F1}, {CurrentLocation.Y:F1}, {CurrentLocation.Z:F1}) → fly ({flyTarget.X:F1}, {flyTarget.Y:F1}, {flyTarget.Z:F1})");
+                _plugin.AddDebugLog($"[Flying] No valid RealXYZ - using Y+50 fallback: ({flyTarget.X:F1}, {flyTarget.Y:F1}, {flyTarget.Z:F1})");
             }
             nav.FlyToPosition(flyTarget);
             stateActionIssued = true;
@@ -681,7 +691,7 @@ public class StateManager : IDisposable
         var targetPos = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
         // Recalculate fly target for stuck re-pathfind (same logic as initial)
         var dbEntryRepathfind = _plugin.MapLocationDatabase.FindEntry(CurrentLocation.TerritoryId, CurrentLocation.X, CurrentLocation.Z);
-        var flyTargetPos = dbEntryRepathfind != null
+        var flyTargetPos = (dbEntryRepathfind != null && dbEntryRepathfind.HasRealXYZ)
             ? new Vector3(dbEntryRepathfind.RealX, dbEntryRepathfind.RealY, dbEntryRepathfind.RealZ)
             : new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
         var distanceFromTarget = Vector3.Distance(currentPos, targetPos);

@@ -43,6 +43,9 @@ public class Configuration : IPluginConfiguration
     // Mount Settings
     public string SelectedMount { get; set; } = "Company Chocobo";
 
+    // Map Location Database
+    public bool AutoUpdateLocOnLogin { get; set; } = true;
+
     public void Save()
     {
         Plugin.PluginInterface.SavePluginConfig(this);

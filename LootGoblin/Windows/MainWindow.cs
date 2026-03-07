@@ -267,20 +267,70 @@ public class MainWindow : Window, IDisposable
                 .ThenBy(m => m.Name)
                 .ToList();
 
-            // Summary counts
+            // === Implementation Summary ===
             var implemented = maps.Count(m => m.Status == ImplementationStatus.Implemented);
             var wip = maps.Count(m => m.Status == ImplementationStatus.WIP);
             var notStarted = maps.Count(m => m.Status == ImplementationStatus.NotStarted);
-            ImGui.Text($"  Total: {maps.Count}  ");
+            ImGui.Text($"  Maps: {maps.Count}  ");
             ImGui.SameLine();
             ImGui.TextColored(ColorGreen, $"Done: {implemented}");
             ImGui.SameLine();
             ImGui.TextColored(ColorYellow, $"  WIP: {wip}");
             ImGui.SameLine();
             ImGui.TextColored(ColorGrey, $"  TODO: {notStarted}");
+
+            // === Location Database Summary ===
+            var db = plugin.MapLocationDatabase;
+            ImGui.Text($"  Locations: {db.TotalLocations} total  ");
+            ImGui.SameLine();
+            ImGui.TextColored(ColorGreen, $"Resolved: {db.ResolvedLocations}");
+            ImGui.SameLine();
+            ImGui.TextColored(ColorGrey, $"  Missing: {db.TotalLocations - db.ResolvedLocations}");
+
+            ImGui.Text($"  Community: {db.CommunityEntries.Count}  ");
+            ImGui.SameLine();
+            ImGui.Text($"User: {db.UserEntries.Count}  ");
+            ImGui.SameLine();
+            ImGui.Text($"TreasureSpot: {db.TreasureSpotEntries.Count}");
+
+            var userOnly = db.UserOnlyResolved;
+            if (userOnly > 0)
+            {
+                ImGui.TextColored(ColorCyan, $"  ★ You have {userOnly} location(s) not in community DB - consider sharing!");
+            }
+
             ImGui.Spacing();
 
-            // Group by expansion
+            // === Download / Auto-Update Controls ===
+            if (db.IsDownloading)
+            {
+                ImGui.TextColored(ColorYellow, "  Downloading...");
+            }
+            else
+            {
+                if (ImGui.Button("Download Updated Locs"))
+                {
+                    _ = db.DownloadCommunityDataAsync();
+                }
+                if (!string.IsNullOrEmpty(db.LastDownloadResult))
+                {
+                    ImGui.SameLine();
+                    var dlColor = db.LastDownloadResult.StartsWith("OK") ? ColorGreen :
+                                  db.LastDownloadResult.StartsWith("Error") ? ColorRed : ColorGrey;
+                    ImGui.TextColored(dlColor, db.LastDownloadResult);
+                }
+            }
+
+            var autoUpdate = plugin.Configuration.AutoUpdateLocOnLogin;
+            if (ImGui.Checkbox("Auto-update locations on login", ref autoUpdate))
+            {
+                plugin.Configuration.AutoUpdateLocOnLogin = autoUpdate;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Spacing();
+
+            // === Map Type Details (grouped by expansion) ===
             var grouped = maps.GroupBy(m => m.Expansion).ToList();
             foreach (var group in grouped)
             {
@@ -335,6 +385,27 @@ public class MainWindow : Window, IDisposable
                     }
                     ImGui.TreePop();
                 }
+            }
+
+            // === Zone Location Stats ===
+            if (ImGui.TreeNode("Location Data by Zone##zonestats"))
+            {
+                var zoneStats = db.GetZoneStats();
+                foreach (var kvp in zoneStats.OrderBy(z => z.Key))
+                {
+                    var zone = kvp.Key;
+                    var (total, resolved, zoneUserOnly) = kvp.Value;
+                    var pct = total > 0 ? (int)(100.0 * resolved / total) : 0;
+
+                    var zoneColor = pct >= 100 ? ColorGreen : pct > 0 ? ColorYellow : ColorGrey;
+                    ImGui.TextColored(zoneColor, $"  {zone}: {resolved}/{total} ({pct}%)");
+                    if (zoneUserOnly > 0)
+                    {
+                        ImGui.SameLine();
+                        ImGui.TextColored(ColorCyan, $" [+{zoneUserOnly} yours]");
+                    }
+                }
+                ImGui.TreePop();
             }
         }
     }
