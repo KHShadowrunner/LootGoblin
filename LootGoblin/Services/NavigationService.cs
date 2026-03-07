@@ -164,6 +164,8 @@ public class NavigationService : IDisposable
             var aetheryteSheet = _dataManager.GetExcelSheet<Aetheryte>();
             if (aetheryteSheet == null) return 0;
 
+            _plugin.AddDebugLog($"[Aetheryte] Searching territory {territoryId}, target=({targetPosition.X:F1}, {targetPosition.Y:F1}, {targetPosition.Z:F1}), teleport list count={count}");
+
             // Collect all candidate aetherytes in the target territory
             var candidates = new System.Collections.Generic.List<(uint Id, string Name, uint Cost, Vector3 WorldPos)>();
 
@@ -182,35 +184,53 @@ public class NavigationService : IDisposable
                 var worldPos = Vector3.Zero;
                 try
                 {
-                    var levelSheet = _dataManager.GetExcelSheet<Level>();
-                    if (levelSheet != null)
+                    int levelCount = 0;
+                    foreach (var lvl in aetheryte.Level)
                     {
-                        var levelRef = aetheryte.Level;
-                        foreach (var lvl in levelRef)
+                        levelCount++;
+                        var levelRow = lvl.ValueNullable;
+                        if (levelRow != null)
                         {
-                            var levelRow = lvl.ValueNullable;
-                            if (levelRow != null && levelRow.Value.Territory.RowId == territoryId)
+                            var lx = levelRow.Value.X;
+                            var ly = levelRow.Value.Y;
+                            var lz = levelRow.Value.Z;
+                            _plugin.AddDebugLog($"  [Level] {name}: Level[{levelCount-1}] RowId={lvl.RowId} XYZ=({lx:F1}, {ly:F1}, {lz:F1})");
+                            if (lx != 0 || lz != 0) // Take first entry with non-zero coords
                             {
-                                worldPos = new Vector3(levelRow.Value.X, levelRow.Value.Y, levelRow.Value.Z);
+                                worldPos = new Vector3(lx, ly, lz);
                                 break;
                             }
                         }
+                        else
+                        {
+                            _plugin.AddDebugLog($"  [Level] {name}: Level[{levelCount-1}] RowId={lvl.RowId} -> null");
+                        }
                     }
+                    if (levelCount == 0)
+                        _plugin.AddDebugLog($"  [Level] {name}: Level collection was EMPTY (0 entries)");
+                    if (worldPos == Vector3.Zero && levelCount > 0)
+                        _plugin.AddDebugLog($"  [Level] {name}: iterated {levelCount} entries but no valid position found");
                 }
-                catch { /* Level lookup failed, worldPos stays Zero */ }
+                catch (Exception ex)
+                {
+                    _plugin.AddDebugLog($"  [Level] {name}: EXCEPTION {ex.GetType().Name}: {ex.Message}");
+                }
 
                 candidates.Add((entry.AetheryteId, name, entry.GilCost, worldPos));
             }
 
             if (candidates.Count == 0)
             {
-                _plugin.AddDebugLog($"No unlocked aetheryte found for territory {territoryId}.");
+                _plugin.AddDebugLog($"[Aetheryte] No unlocked aetheryte found for territory {territoryId}.");
                 return 0;
             }
 
             // Log all candidates
             foreach (var c in candidates)
-                _plugin.AddDebugLog($"  Aetheryte: {c.Name} (ID: {c.Id}, Cost: {c.Cost}g, Pos: {c.WorldPos})");
+            {
+                var posStr = c.WorldPos != Vector3.Zero ? $"({c.WorldPos.X:F1}, {c.WorldPos.Y:F1}, {c.WorldPos.Z:F1})" : "NO_POS";
+                _plugin.AddDebugLog($"  [Candidate] {c.Name} (ID: {c.Id}, Cost: {c.Cost}g, Pos: {posStr})");
+            }
 
             uint bestId;
             string bestName;
@@ -221,7 +241,6 @@ public class NavigationService : IDisposable
                 var closest = candidates
                     .Where(c => c.WorldPos != Vector3.Zero)
                     .OrderBy(c => {
-                        // Compare XZ distance only (Y can vary wildly with altitude)
                         var dx = c.WorldPos.X - targetPosition.X;
                         var dz = c.WorldPos.Z - targetPosition.Z;
                         return dx * dx + dz * dz;
@@ -230,7 +249,7 @@ public class NavigationService : IDisposable
                 bestId = closest.Id;
                 bestName = closest.Name;
                 var xzDist = Math.Sqrt(Math.Pow(closest.WorldPos.X - targetPosition.X, 2) + Math.Pow(closest.WorldPos.Z - targetPosition.Z, 2));
-                _plugin.AddDebugLog($"Selected closest aetheryte: {bestName} (ID: {bestId}, XZ dist: {xzDist:F0}y from flag)");
+                _plugin.AddDebugLog($"[Aetheryte] Selected closest: {bestName} (ID: {bestId}, XZ dist: {xzDist:F0}y from flag)");
             }
             else
             {
@@ -238,7 +257,7 @@ public class NavigationService : IDisposable
                 var cheapest = candidates.OrderBy(c => c.Cost).First();
                 bestId = cheapest.Id;
                 bestName = cheapest.Name;
-                _plugin.AddDebugLog($"Selected cheapest aetheryte: {bestName} (ID: {bestId}, Cost: {cheapest.Cost}g) [no position data]");
+                _plugin.AddDebugLog($"[Aetheryte] FALLBACK cheapest: {bestName} (ID: {bestId}, Cost: {cheapest.Cost}g) [no position data available]");
             }
 
             return bestId;
@@ -246,6 +265,7 @@ public class NavigationService : IDisposable
         catch (Exception ex)
         {
             _log.Error($"Error finding nearest aetheryte: {ex.Message}");
+            _plugin.AddDebugLog($"[Aetheryte] FATAL EXCEPTION: {ex.GetType().Name}: {ex.Message}");
             return 0;
         }
     }

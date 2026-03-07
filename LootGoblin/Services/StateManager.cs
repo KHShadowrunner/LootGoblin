@@ -507,8 +507,21 @@ public class StateManager : IDisposable
 
             if (Plugin.ClientState.TerritoryType == location.TerritoryId)
             {
-                // Already in the right zone - skip teleport
-                TransitionTo(BotState.Mounting, "Already in zone! Mounting up...");
+                // Already in the right zone - check if a closer aetheryte exists
+                var playerPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+                var playerDistToFlag = Math.Sqrt(Math.Pow(playerPos.X - location.X, 2) + Math.Pow(playerPos.Z - location.Z, 2));
+
+                if (location.NearestAetheryteId != 0 && playerDistToFlag > 200)
+                {
+                    // We're far from the flag - teleport to nearest aetheryte
+                    _plugin.AddDebugLog($"[DetectingLocation] Already in zone but {playerDistToFlag:F0}y from flag - teleporting to closer aetheryte");
+                    TransitionTo(BotState.Teleporting, $"In zone but far ({playerDistToFlag:F0}y) - teleporting closer...");
+                }
+                else
+                {
+                    _plugin.AddDebugLog($"[DetectingLocation] Already in zone, {playerDistToFlag:F0}y from flag - mounting up");
+                    TransitionTo(BotState.Mounting, "Already in zone! Mounting up...");
+                }
             }
             else
             {
@@ -635,10 +648,22 @@ public class StateManager : IDisposable
 
         if (!stateActionIssued)
         {
-            // Fly to target with +15y altitude boost for terrain clearance (especially in hilly SB zones)
-            var flyTarget = new Vector3(CurrentLocation.X, CurrentLocation.Y + 15f, CurrentLocation.Z);
+            // Check MapLocationDatabase for a stored real XYZ for this flag position
+            var dbEntry = _plugin.MapLocationDatabase.FindEntry(CurrentLocation.TerritoryId, CurrentLocation.X, CurrentLocation.Z);
+            Vector3 flyTarget;
+            if (dbEntry != null)
+            {
+                // Use stored real position from previous successful dig
+                flyTarget = new Vector3(dbEntry.RealX, dbEntry.RealY, dbEntry.RealZ);
+                _plugin.AddDebugLog($"[Flying] Using stored real XYZ from MapLocDB: ({flyTarget.X:F1}, {flyTarget.Y:F1}, {flyTarget.Z:F1})");
+            }
+            else
+            {
+                // No stored location - use Y+50 altitude boost as temporary fallback
+                flyTarget = new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
+                _plugin.AddDebugLog($"[Flying] No DB entry - using Y+50 fallback: ground ({CurrentLocation.X:F1}, {CurrentLocation.Y:F1}, {CurrentLocation.Z:F1}) → fly ({flyTarget.X:F1}, {flyTarget.Y:F1}, {flyTarget.Z:F1})");
+            }
             nav.FlyToPosition(flyTarget);
-            _plugin.AddDebugLog($"[Flying] Target: ground ({CurrentLocation.X:F1}, {CurrentLocation.Y:F1}, {CurrentLocation.Z:F1}) → fly ({flyTarget.X:F1}, {flyTarget.Y:F1}, {flyTarget.Z:F1})");
             stateActionIssued = true;
             lastStuckCheckPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
             lastStuckCheckTime = DateTime.Now;
@@ -654,8 +679,11 @@ public class StateManager : IDisposable
         var currentPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
         // Ground-level target for XZ arrival check and distance display
         var targetPos = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
-        // Elevated target for stuck detection re-pathfind
-        var flyTargetPos = new Vector3(CurrentLocation.X, CurrentLocation.Y + 15f, CurrentLocation.Z);
+        // Recalculate fly target for stuck re-pathfind (same logic as initial)
+        var dbEntryRepathfind = _plugin.MapLocationDatabase.FindEntry(CurrentLocation.TerritoryId, CurrentLocation.X, CurrentLocation.Z);
+        var flyTargetPos = dbEntryRepathfind != null
+            ? new Vector3(dbEntryRepathfind.RealX, dbEntryRepathfind.RealY, dbEntryRepathfind.RealZ)
+            : new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
         var distanceFromTarget = Vector3.Distance(currentPos, targetPos);
         
         // Stuck detection: only re-pathfind if stuck (10+ seconds without moving 5+ yalms)
@@ -665,7 +693,7 @@ public class StateManager : IDisposable
             var movedDistance = Vector3.Distance(currentPos, lastStuckCheckPos);
             if (movedDistance < 5.0f)
             {
-                // Stuck! Re-pathfind to elevated target
+                // Stuck! Re-pathfind
                 nav.FlyToPosition(flyTargetPos);
                 _plugin.AddDebugLog($"[Flying] Stuck detected (moved {movedDistance:F1}y in 10s) - re-pathfinding (distance: {distanceFromTarget:F1}y)");
             }
@@ -680,6 +708,25 @@ public class StateManager : IDisposable
         if (!_plugin.NavigationService.IsMounted() && dismountAttemptStart != DateTime.MinValue)
         {
             _plugin.AddDebugLog("Successfully dismounted - proceeding with map content");
+
+            // Record this real landing position to MapLocationDatabase for future use
+            if (CurrentLocation != null)
+            {
+                var realPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+                if (realPos != Vector3.Zero)
+                {
+                    var mapItemSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+                    var mapName = SelectedMapItemId > 0
+                        ? (mapItemSheet?.GetRow(SelectedMapItemId).Name.ToString() ?? $"Map {SelectedMapItemId}")
+                        : "Unknown Map";
+                    _plugin.MapLocationDatabase.RecordLocation(
+                        CurrentLocation.TerritoryId,
+                        CurrentLocation.ZoneName,
+                        mapName,
+                        CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z,
+                        realPos.X, realPos.Y, realPos.Z);
+                }
+            }
             
             CommandHelper.SendCommand("/bmrai on");
             _plugin.AddDebugLog("Enabled BMR AI after dismount");

@@ -44,6 +44,7 @@ public sealed class Plugin : IDalamudPlugin
     public PartyService PartyService { get; init; }
     public StateManager StateManager { get; init; }
     public ChestDetectionService ChestDetectionService { get; init; }
+    public MapLocationDatabase MapLocationDatabase { get; init; }
 
     // IPC
     public GlobeTrotterIPC GlobeTrotterIPC { get; init; }
@@ -79,6 +80,9 @@ public sealed class Plugin : IDalamudPlugin
 
         // Initialize chest detection
         ChestDetectionService = new ChestDetectionService(this, Log);
+
+        // Initialize map location database
+        MapLocationDatabase = new MapLocationDatabase(this, Log);
 
         // Initialize state machine
         StateManager = new StateManager(this, Framework, Log);
@@ -134,6 +138,7 @@ public sealed class Plugin : IDalamudPlugin
 
         YesAlreadyIPC.Dispose();
         StateManager.Dispose();
+        // MapLocationDatabase has no Dispose needed (no subscriptions)
         ChestDetectionService.Dispose();
         PartyService.Dispose();
         NavigationService.Dispose();
