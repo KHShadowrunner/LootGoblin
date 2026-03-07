@@ -1048,5 +1048,61 @@
     "RecordedAt": "2026-03-07 19:37:28",
     "TerritoryId": 180,
     "ZoneName": "Outer La Noscea"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": 290.6,
+    "FlagY": -25.6,
+    "FlagZ": 166.4,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Leather Map",
+    "RealX": 290.7,
+    "RealY": -25.5,
+    "RealZ": 166.4,
+    "RecordedAt": "2026-03-07 19:41:56",
+    "TerritoryId": 154,
+    "ZoneName": "North Shroud"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": -59.2,
+    "FlagY": -47.3,
+    "FlagZ": 335.3,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Leather Map",
+    "RealX": -59.3,
+    "RealY": -47.3,
+    "RealZ": 335.3,
+    "RecordedAt": "2026-03-07 19:42:28",
+    "TerritoryId": 154,
+    "ZoneName": "North Shroud"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": 55.8,
+    "FlagY": 66.1,
+    "FlagZ": -293.4,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Leather Map",
+    "RealX": 55.8,
+    "RealY": 66.1,
+    "RealZ": -293.4,
+    "RecordedAt": "2026-03-07 19:42:53",
+    "TerritoryId": 134,
+    "ZoneName": "Middle La Noscea"
+  },
+  {
+    "AetheryteName": "",
+    "FlagX": 66.9,
+    "FlagY": 57.5,
+    "FlagZ": -315.1,
+    "HasRealXYZ": true,
+    "MapName": "Timeworn Goatskin Map",
+    "RealX": 61.4,
+    "RealY": 58.5,
+    "RealZ": -313.9,
+    "RecordedAt": "2026-03-07 19:44:17",
+    "TerritoryId": 180,
+    "ZoneName": "Outer La Noscea"
   }
 ]
