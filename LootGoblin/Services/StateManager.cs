@@ -109,6 +109,8 @@ public class StateManager : IDisposable
     private uint cycleCurrentAetheryteId;
     private bool cycleTeleportIssued;
     private DateTime cycleTeleportTime;
+    private bool cycleLandingIssued;
+    private DateTime cycleLandingTime;
     private List<MapLocationEntry> cycleMapLocationQueue = new();
     private int cycleMapLocationIndex;
 
@@ -3094,6 +3096,7 @@ public class StateManager : IDisposable
                 cycleMapLocationIndex++;
                 stateStartTime = DateTime.Now;
                 stateActionIssued = false;
+                cycleLandingIssued = false;
                 SetupNextCycleMapLocation();
                 return;
             }
@@ -3143,6 +3146,7 @@ public class StateManager : IDisposable
                 stateStartTime = DateTime.Now;
                 stateActionIssued = false;
                 cycleTeleportIssued = false;
+                cycleLandingIssued = false;
                 mountAttemptStart = DateTime.MinValue;
                 mountAttempts = 0;
                 SetupNextCycleMapLocation();
@@ -3158,41 +3162,75 @@ public class StateManager : IDisposable
             var target = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
             var xzDist = Math.Sqrt(Math.Pow(playerPos.X - target.X, 2) + Math.Pow(playerPos.Z - target.Z, 2));
 
-            if (xzDist < 15.0)
+            // Check if we should start landing
+            if (xzDist < 2.0 && nav.IsFlying())
             {
-                // Close enough - record position and move to next
-                _plugin.AddDebugLog($"[CycleMapLocs] Arrived near flag ({xzDist:F0}y) - recording position");
-
-                if (playerPos != Vector3.Zero)
-                {
-                    var mapItemSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
-                    var entry = cycleMapLocationQueue[cycleMapLocationIndex];
-                    _plugin.MapLocationDatabase.RecordLocation(
-                        CurrentLocation.TerritoryId,
-                        CurrentLocation.ZoneName,
-                        entry.MapName,
-                        CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z,
-                        playerPos.X, playerPos.Y, playerPos.Z);
-                }
-
-                cycleMapLocationIndex++;
-                stateStartTime = DateTime.Now;
-                stateActionIssued = false;
-                cycleTeleportIssued = false;
-                mountAttemptStart = DateTime.MinValue;
-                mountAttempts = 0;
-                SetupNextCycleMapLocation();
+                // Close enough - land
+                _plugin.AddDebugLog($"[CycleMapLocs] Close enough ({xzDist:F0}y) - landing");
+                _mountService.ForceLand();
+                cycleLandingIssued = true;
+                cycleLandingTime = DateTime.Now;
                 return;
             }
 
-            // Not close yet - fly there
-            if (!lastStuckCheckPos.Equals(Vector3.Zero) || lastStuckCheckTime == DateTime.MinValue ||
+            // Wait for landing to complete
+            if (cycleLandingIssued)
+            {
+                if ((DateTime.Now - cycleLandingTime).TotalSeconds < 10.0 && nav.IsFlying())
+                    return; // Still landing
+
+                // Landing complete or timed out - record position
+                if (!nav.IsFlying() && !nav.IsMounted())
+                {
+                    _plugin.AddDebugLog($"[CycleMapLocs] Landed and dismounted - recording position");
+
+                    if (playerPos != Vector3.Zero)
+                    {
+                        var entry = cycleMapLocationQueue[cycleMapLocationIndex];
+                        _plugin.MapLocationDatabase.RecordLocation(
+                            CurrentLocation.TerritoryId,
+                            CurrentLocation.ZoneName,
+                            entry.MapName,
+                            CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z,
+                            playerPos.X, playerPos.Y, playerPos.Z);
+                    }
+
+                    cycleMapLocationIndex++;
+                    stateStartTime = DateTime.Now;
+                    stateActionIssued = false;
+                    cycleTeleportIssued = false;
+                    cycleLandingIssued = false;
+                    mountAttemptStart = DateTime.MinValue;
+                    mountAttempts = 0;
+                    SetupNextCycleMapLocation();
+                    return;
+                }
+                else if (nav.IsMounted())
+                {
+                    // Still mounted after landing attempt - dismount
+                    _mountService.Dismount();
+                    return;
+                }
+            }
+
+            // Not close yet - fly there (only issue command once to avoid spamming)
+            if (!lastStuckCheckPos.Equals(Vector3.Zero) && !lastStuckCheckPos.Equals(playerPos) &&
                 (DateTime.Now - lastStuckCheckTime).TotalSeconds > 5.0)
             {
                 var flyTarget = new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
                 nav.FlyToPosition(flyTarget);
                 lastStuckCheckPos = playerPos;
                 lastStuckCheckTime = DateTime.Now;
+                _plugin.AddDebugLog($"[CycleMapLocs] Flying to target ({xzDist:F0}y away)");
+            }
+            else if (lastStuckCheckPos.Equals(Vector3.Zero))
+            {
+                // First time - issue command
+                var flyTarget = new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
+                nav.FlyToPosition(flyTarget);
+                lastStuckCheckPos = playerPos;
+                lastStuckCheckTime = DateTime.Now;
+                _plugin.AddDebugLog($"[CycleMapLocs] Starting flight to target ({xzDist:F0}y away)");
             }
         }
 

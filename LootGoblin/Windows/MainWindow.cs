@@ -277,7 +277,8 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine();
             ImGui.TextColored(ColorYellow, $"  WIP: {wip}");
             ImGui.SameLine();
-            ImGui.TextColored(ColorGrey, $"  TODO: {notStarted}");
+            if (notStarted > 0)
+                ImGui.TextColored(ColorGrey, $"  Not Started: {notStarted}");
 
             // === Location Database Summary ===
             var db = plugin.MapLocationDatabase;
@@ -423,8 +424,16 @@ public class MainWindow : Window, IDisposable
                         ImGui.TextColored(statusColor, statusIcon);
                         ImGui.SameLine();
 
-                        // Name
-                        ImGui.Text(map.Name);
+                        // Name + instance name(s)
+                        var displayName = map.Name;
+                        if (!string.IsNullOrEmpty(map.InstanceName))
+                        {
+                            if (!string.IsNullOrEmpty(map.SecondInstanceName))
+                                displayName += $" [{map.InstanceName} / {map.SecondInstanceName}]";
+                            else
+                                displayName += $" [{map.InstanceName}]";
+                        }
+                        ImGui.Text(displayName);
                         ImGui.SameLine();
 
                         // Category tag
@@ -449,7 +458,10 @@ public class MainWindow : Window, IDisposable
                         if (map.DungeonTerritoryId > 0)
                         {
                             ImGui.SameLine();
-                            ImGui.TextColored(ColorGrey, $" | Territory {map.DungeonTerritoryId}");
+                            if (map.SecondTerritoryId > 0)
+                                ImGui.TextColored(ColorGrey, $" | Territory {map.DungeonTerritoryId} / {map.SecondTerritoryId}");
+                            else
+                                ImGui.TextColored(ColorGrey, $" | Territory {map.DungeonTerritoryId}");
                         }
                     }
                     ImGui.TreePop();

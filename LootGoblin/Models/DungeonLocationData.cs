@@ -85,6 +85,124 @@ public static class DungeonLocationData
                 }
             )
         },
+        // Territory 558: The Aquapolis (Dungeon Type, Door: "Vault Door", 7 rooms, single path, no cutscene - player walks to next room)
+        {
+            558,
+            (
+                new DungeonTransitionPoint(1.0083782672882f, 0.19999814033508f, 340.36688232422f, "Room 1 Start"),
+                new List<DungeonTransitionPoint>
+                {
+                    new(-0.016964452341199f, -7.8000040054321f, 217.08427429199f, "Room 2"),
+                    new(0.0065348446369171f, -15.800004959106f, 92.169876098633f, "Room 3"),
+                    new(-0.12571297585964f, -23.800001144409f, -30.496042251587f, "Room 4"),
+                    new(0.25867503881454f, -31.724830627441f, -157.66818237305f, "Room 5"),
+                    new(-0.096912704408169f, -39.779590606689f, -282.12805175781f, "Room 6"),
+                    new(-0.095316514372826f, -47.70182800293f, -403.92584228516f, "Room 7"),
+                }
+            )
+        },
+
+        // Territory 879: The Dungeons of Lyhe Ghiah (Dungeon Type, Door: "Elaborate Gate", 5 rooms, left/right paths)
+        {
+            879,
+            (
+                new DungeonTransitionPoint(0.30181908607483f, -39.97151184082f, 142.62704467773f, "Room 1 Start"),
+                new List<DungeonTransitionPoint>
+                {
+                    // Room 2 (left and right are same position)
+                    new(28.071523666382f, -39.235473632812f, 101.03690338135f, "Room 2 Left Door"),
+                    new(28.071523666382f, -39.235473632812f, 101.03690338135f, "Room 2 Right Door"),
+                    // Room 3
+                    new(-29.093864440918f, 1.1753497123718f, -29.101762771606f, "Room 3 Left Door"),
+                    new(29.330530166626f, 1.2513842582703f, -29.013732910156f, "Room 3 Right Door"),
+                    // Room 4
+                    new(-29.061462402344f, 41.129096984863f, -158.93838500977f, "Room 4 Left Door"),
+                    new(29.223150253296f, 41.200305938721f, -158.97257995605f, "Room 4 Right Door"),
+                    // Room 5
+                    new(-28.82586479187f, 81.004730224609f, -288.78784179688f, "Room 5 Left Door"),
+                    new(29.285348892212f, 81.20580291748f, -288.87875366211f, "Room 5 Right Door"),
+                }
+            )
+        },
+
+        // Territory 1000: The Excitatron 6000 (Dungeon Type, Door: "Stage Door", 5 rooms, left/right paths)
+        {
+            1000,
+            (
+                new DungeonTransitionPoint(0.032300509512424f, 20.000007629395f, 254.26850891113f, "Room 1 Start"),
+                new List<DungeonTransitionPoint>
+                {
+                    // Room 2
+                    new(80.953315734863f, -10.038639068604f, 101.36717224121f, "Room 2 Left Door"),
+                    new(138.77351379395f, -10.038636207581f, 101.35768127441f, "Room 2 Right Door"),
+                    // Room 3
+                    new(81.37922668457f, -10.038649559021f, -48.605068206787f, "Room 3 Left Door"),
+                    new(138.8713684082f, -10.038649559021f, -48.890167236328f, "Room 3 Right Door"),
+                    // Room 4
+                    new(-138.51029968262f, 19.961349487305f, -168.72546386719f, "Room 4 Left Door"),
+                    new(138.79026794434f, -10.038649559021f, -48.792549133301f, "Room 4 Right Door"),
+                    // Room 5
+                    new(-138.91505432129f, 19.961368560791f, -319.07586669922f, "Room 5 Left Door"),
+                    new(-81.359451293945f, 19.961378097534f, -318.83532714844f, "Room 5 Right Door"),
+                }
+            )
+        },
+
+        // Territory 1209: Cenote Ja Ja Gural (Dungeon Type, Door: "Vault Door", 5 rooms, left/right paths)
+        {
+            1209,
+            (
+                new DungeonTransitionPoint(0.12231740355492f, -400.0f, 377.30017089844f, "Room 1 Start"),
+                new List<DungeonTransitionPoint>
+                {
+                    // Room 2
+                    new(-35.063709259033f, -400.00003051758f, 341.51950073242f, "Room 2 Left Door"),
+                    new(35.617687225342f, -400.0f, 341.68154907227f, "Room 2 Right Door"),
+                    // Room 3
+                    new(-35.291564941406f, -400.0f, 156.95146179199f, "Room 3 Left Door"),
+                    new(35.601676940918f, -400.0f, 156.61825561523f, "Room 3 Right Door"),
+                    // Room 4
+                    new(124.29012298584f, -290.00003051758f, -16.546094894409f, "Room 4 Left Door"),
+                    new(195.96708679199f, -290.00015258789f, -16.54662322998f, "Room 4 Right Door"),
+                    // Room 5
+                    new(-232.17561340332f, -169.0f, -180.32594299316f, "Room 5 Left Door"),
+                    new(-162.12966918945f, -169.00015258789f, -179.98109436035f, "Room 5 Right Door"),
+                }
+            )
+        },
+    };
+
+    // Door names by territory for object detection
+    private static readonly Dictionary<uint, string> DoorNames = new()
+    {
+        { 558, "Vault Door" },
+        { 712, "Sluice Gate" },
+        { 725, "Sluice Gate" },
+        { 879, "Elaborate Gate" },
+        { 1000, "Stage Door" },
+        { 1209, "Vault Door" },
+    };
+
+    // Sphere/roulette names by territory for object detection
+    private static readonly Dictionary<uint, string> SphereNames = new()
+    {
+        { 924, "Arcane Sphere" },
+        { 1123, "Arcane Sphere" },
+        { 1279, "Hypnoslot Machine" },
+    };
+
+    // Room count by territory
+    private static readonly Dictionary<uint, int> RoomCounts = new()
+    {
+        { 558, 7 },
+        { 712, 7 },
+        { 725, 7 },
+        { 879, 5 },
+        { 924, 0 }, // Roulette
+        { 1000, 5 },
+        { 1123, 0 }, // Roulette
+        { 1209, 5 },
+        { 1279, 0 }, // Roulette
     };
 
     /// <summary>
@@ -117,5 +235,45 @@ public static class DungeonLocationData
     public static bool HasDungeonData(uint territoryId)
     {
         return Dungeons.ContainsKey(territoryId);
+    }
+
+    /// <summary>
+    /// Get the door name for a given territory (e.g. "Vault Door", "Elaborate Gate", "Stage Door").
+    /// </summary>
+    public static string? GetDoorName(uint territoryId)
+    {
+        return DoorNames.TryGetValue(territoryId, out var name) ? name : null;
+    }
+
+    /// <summary>
+    /// Get the sphere/roulette object name for a given territory (e.g. "Arcane Sphere", "Hypnoslot Machine").
+    /// </summary>
+    public static string? GetSphereName(uint territoryId)
+    {
+        return SphereNames.TryGetValue(territoryId, out var name) ? name : null;
+    }
+
+    /// <summary>
+    /// Get the room count for a given territory. Returns 0 for roulette-type dungeons.
+    /// </summary>
+    public static int GetRoomCount(uint territoryId)
+    {
+        return RoomCounts.TryGetValue(territoryId, out var count) ? count : 0;
+    }
+
+    /// <summary>
+    /// Get all known sphere/roulette object names across all dungeons.
+    /// </summary>
+    public static IEnumerable<string> GetAllSphereNames()
+    {
+        return SphereNames.Values.Distinct();
+    }
+
+    /// <summary>
+    /// Get all known door names across all dungeons.
+    /// </summary>
+    public static IEnumerable<string> GetAllDoorNames()
+    {
+        return DoorNames.Values.Distinct();
     }
 }
