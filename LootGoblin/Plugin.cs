@@ -45,6 +45,7 @@ public sealed class Plugin : IDalamudPlugin
     public StateManager StateManager { get; init; }
     public ChestDetectionService ChestDetectionService { get; init; }
     public MapLocationDatabase MapLocationDatabase { get; init; }
+    public AetherytePositionDatabase AetherytePositionDatabase { get; init; }
 
     // IPC
     public GlobeTrotterIPC GlobeTrotterIPC { get; init; }
@@ -84,6 +85,9 @@ public sealed class Plugin : IDalamudPlugin
         // Initialize map location database
         MapLocationDatabase = new MapLocationDatabase(this, Log);
         MapLocationDatabase.PopulateFromTreasureSpot(DataManager);
+
+        // Initialize aetheryte position database (records player positions at aetherytes)
+        AetherytePositionDatabase = new AetherytePositionDatabase(this, Log);
 
         // Auto-update community data on login
         ClientState.Login += OnLogin;

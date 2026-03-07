@@ -103,6 +103,15 @@ public class StateManager : IDisposable
     private DateTime lastCompanionCheckTime = DateTime.MinValue; // Companion summoning timer
     private DateTime companionStanceDeferred = DateTime.MinValue; // Deferred stance set after summon
 
+    // Cycling mode state
+    private List<(uint Id, string Name, uint TerritoryId)> cycleAetheryteQueue = new();
+    private int cycleAetheryteIndex;
+    private uint cycleCurrentAetheryteId;
+    private bool cycleTeleportIssued;
+    private DateTime cycleTeleportTime;
+    private List<MapLocationEntry> cycleMapLocationQueue = new();
+    private int cycleMapLocationIndex;
+
     private static readonly Dictionary<BotState, double> StateTimeouts = new()
     {
         { BotState.OpeningMap,        30  },
@@ -115,6 +124,8 @@ public class StateManager : IDisposable
         { BotState.DungeonCombat,      300 },
         { BotState.DungeonLooting,     120 },
         { BotState.DungeonProgressing, 120 },
+        { BotState.CyclingAetherytes,   60  },
+        { BotState.CyclingMapLocations, 300 },
     };
 
     public StateManager(Plugin plugin, IFramework framework, IPluginLog log)
@@ -284,6 +295,8 @@ public class StateManager : IDisposable
             case BotState.DungeonCombat:    TickDungeonCombat();    break;
             case BotState.DungeonLooting:   TickDungeonLooting();   break;
             case BotState.DungeonProgressing: TickDungeonProgressing(); break;
+            case BotState.CyclingAetherytes: TickCyclingAetherytes(); break;
+            case BotState.CyclingMapLocations: TickCyclingMapLocations(); break;
             case BotState.Completed:        TickCompleted();        break;
         }
     }
@@ -503,6 +516,21 @@ public class StateManager : IDisposable
             var aetheryteId = _plugin.NavigationService.FindNearestAetheryte(location.TerritoryId, flagPos);
             location.NearestAetheryteId = aetheryteId;
 
+            // Populate aetheryte name for passive recording
+            if (aetheryteId > 0)
+            {
+                try
+                {
+                    var aetheryteSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>();
+                    if (aetheryteSheet != null)
+                    {
+                        var aetheryte = aetheryteSheet.GetRow(aetheryteId);
+                        location.NearestAetheryteName = aetheryte.PlaceName.ValueNullable?.Name.ToString() ?? $"ID {aetheryteId}";
+                    }
+                }
+                catch { }
+            }
+
             SetLocation(location);
 
             if (Plugin.ClientState.TerritoryType == location.TerritoryId)
@@ -567,6 +595,20 @@ public class StateManager : IDisposable
             if (CurrentLocation != null && currentTerritory == CurrentLocation.TerritoryId)
             {
                 _plugin.AddDebugLog($"[Teleporting] Arrived after {elapsed:F1}s");
+
+                // Passively record aetheryte position for future nearest-aetheryte lookups
+                if (CurrentLocation?.NearestAetheryteId > 0)
+                {
+                    var playerPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+                    if (playerPos != Vector3.Zero)
+                    {
+                        _plugin.AetherytePositionDatabase.RecordPosition(
+                            CurrentLocation.NearestAetheryteId,
+                            CurrentLocation.NearestAetheryteName,
+                            playerPos.X, playerPos.Y, playerPos.Z);
+                    }
+                }
+
                 TransitionTo(BotState.Mounting, "Arrived! Mounting up...");
             }
             else if (elapsed > 15)
@@ -2793,6 +2835,322 @@ public class StateManager : IDisposable
 
         if (_plugin.Configuration.EnableStateLogging)
             _plugin.AddDebugLog($"[State] {prev} → {newState} | {detail}");
+    }
+
+    // ─── Cycling Modes ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Start cycling through all unlocked aetherytes that don't have stored positions.
+    /// Teleports to each one, records player position on arrival, then moves to next.
+    /// </summary>
+    public void StartCyclingAetherytes()
+    {
+        if (State != BotState.Idle && State != BotState.Error && State != BotState.Completed)
+        {
+            _plugin.AddDebugLog("[CycleAetherytes] Cannot start - bot is busy");
+            return;
+        }
+
+        cycleAetheryteQueue = _plugin.AetherytePositionDatabase.GetMissingAetherytes(Plugin.DataManager);
+        if (cycleAetheryteQueue.Count == 0)
+        {
+            _plugin.AddDebugLog("[CycleAetherytes] All unlocked aetherytes already have stored positions!");
+            _plugin.PrintChat("All aetheryte positions are already recorded!");
+            return;
+        }
+
+        cycleAetheryteIndex = 0;
+        cycleTeleportIssued = false;
+        _plugin.AddDebugLog($"[CycleAetherytes] Starting cycle of {cycleAetheryteQueue.Count} missing aetherytes");
+        _plugin.PrintChat($"Cycling {cycleAetheryteQueue.Count} missing aetheryte positions...");
+        TransitionTo(BotState.CyclingAetherytes, $"Cycling aetherytes (0/{cycleAetheryteQueue.Count})...");
+    }
+
+    private unsafe void TickCyclingAetherytes()
+    {
+        if (cycleAetheryteIndex >= cycleAetheryteQueue.Count)
+        {
+            _plugin.AddDebugLog($"[CycleAetherytes] Completed! Recorded {cycleAetheryteQueue.Count} aetheryte positions");
+            _plugin.PrintChat($"Aetheryte cycling complete! {_plugin.AetherytePositionDatabase.Count} positions stored.");
+            TransitionTo(BotState.Idle, "Aetheryte cycling complete!");
+            return;
+        }
+
+        var current = cycleAetheryteQueue[cycleAetheryteIndex];
+        StateDetail = $"Cycling aetherytes ({cycleAetheryteIndex + 1}/{cycleAetheryteQueue.Count}): {current.Name}";
+
+        var nav = _plugin.NavigationService;
+
+        // Step 1: Issue teleport
+        if (!cycleTeleportIssued)
+        {
+            _plugin.AddDebugLog($"[CycleAetherytes] [{cycleAetheryteIndex + 1}/{cycleAetheryteQueue.Count}] Teleporting to {current.Name} (ID:{current.Id})");
+            cycleCurrentAetheryteId = current.Id;
+            nav.TeleportToAetheryte(current.Id);
+            cycleTeleportIssued = true;
+            cycleTeleportTime = DateTime.Now;
+            return;
+        }
+
+        // Step 2: Wait for teleport to start (5s minimum)
+        var elapsed = (DateTime.Now - cycleTeleportTime).TotalSeconds;
+        if (elapsed < 5.0) return;
+
+        // Step 3: Wait for teleport to finish
+        if (nav.IsTeleporting()) return;
+
+        // Step 4: Record position and move to next
+        var playerPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+        if (playerPos != Vector3.Zero)
+        {
+            _plugin.AetherytePositionDatabase.RecordPosition(
+                current.Id, current.Name,
+                playerPos.X, playerPos.Y, playerPos.Z);
+        }
+
+        cycleAetheryteIndex++;
+        cycleTeleportIssued = false;
+
+        // Reset state timeout for next aetheryte
+        stateStartTime = DateTime.Now;
+
+        if (cycleAetheryteIndex >= cycleAetheryteQueue.Count)
+        {
+            _plugin.AddDebugLog($"[CycleAetherytes] Completed! All {cycleAetheryteQueue.Count} positions recorded");
+            _plugin.PrintChat($"Aetheryte cycling complete! {_plugin.AetherytePositionDatabase.Count} positions stored.");
+            TransitionTo(BotState.Idle, "Aetheryte cycling complete!");
+        }
+    }
+
+    /// <summary>
+    /// Start cycling through map locations that don't have RealXYZ data.
+    /// Teleports to nearest aetheryte, flies to flag, lands, records position, moves to next.
+    /// </summary>
+    public void StartCyclingMapLocations(List<MapLocationEntry>? specificEntries = null)
+    {
+        if (State != BotState.Idle && State != BotState.Error && State != BotState.Completed)
+        {
+            _plugin.AddDebugLog("[CycleMapLocs] Cannot start - bot is busy");
+            return;
+        }
+
+        if (specificEntries != null)
+        {
+            cycleMapLocationQueue = specificEntries;
+        }
+        else
+        {
+            // Get all locations missing RealXYZ
+            cycleMapLocationQueue = _plugin.MapLocationDatabase.GetAllMerged()
+                .Where(e => !e.HasRealXYZ)
+                .ToList();
+        }
+
+        if (cycleMapLocationQueue.Count == 0)
+        {
+            _plugin.AddDebugLog("[CycleMapLocs] All locations already have RealXYZ!");
+            _plugin.PrintChat("All map locations already have real XYZ data!");
+            return;
+        }
+
+        cycleMapLocationIndex = 0;
+        _plugin.AddDebugLog($"[CycleMapLocs] Starting cycle of {cycleMapLocationQueue.Count} missing XYZ locations");
+        _plugin.PrintChat($"Cycling {cycleMapLocationQueue.Count} map locations missing real XYZ...");
+
+        // Set up the first location and start the normal bot flow
+        SetupNextCycleMapLocation();
+    }
+
+    private void SetupNextCycleMapLocation()
+    {
+        if (cycleMapLocationIndex >= cycleMapLocationQueue.Count)
+        {
+            _plugin.AddDebugLog($"[CycleMapLocs] Completed! Visited {cycleMapLocationQueue.Count} locations");
+            _plugin.PrintChat($"Map location cycling complete!");
+            TransitionTo(BotState.Idle, "Map location cycling complete!");
+            return;
+        }
+
+        var entry = cycleMapLocationQueue[cycleMapLocationIndex];
+        var flagPos = new Vector3(entry.FlagX, entry.FlagY, entry.FlagZ);
+        var aetheryteId = _plugin.NavigationService.FindNearestAetheryte(entry.TerritoryId, flagPos);
+
+        var location = new MapLocation
+        {
+            TerritoryId = entry.TerritoryId,
+            ZoneName = entry.ZoneName,
+            X = entry.FlagX,
+            Y = entry.FlagY,
+            Z = entry.FlagZ,
+            NearestAetheryteId = aetheryteId,
+        };
+
+        // Populate aetheryte name
+        if (aetheryteId > 0)
+        {
+            try
+            {
+                var aetheryteSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>();
+                if (aetheryteSheet != null)
+                {
+                    var aetheryte = aetheryteSheet.GetRow(aetheryteId);
+                    location.NearestAetheryteName = aetheryte.PlaceName.ValueNullable?.Name.ToString() ?? $"ID {aetheryteId}";
+                }
+            }
+            catch { }
+        }
+
+        SetLocation(location);
+        _plugin.AddDebugLog($"[CycleMapLocs] [{cycleMapLocationIndex + 1}/{cycleMapLocationQueue.Count}] {entry.ZoneName} flag=({entry.FlagX:F1},{entry.FlagZ:F1})");
+
+        // Use CyclingMapLocations state which runs the normal teleport→mount→fly flow
+        // but skips dig/chest and instead records position after landing
+        TransitionTo(BotState.CyclingMapLocations, $"Location {cycleMapLocationIndex + 1}/{cycleMapLocationQueue.Count}: {entry.ZoneName}");
+    }
+
+    private void TickCyclingMapLocations()
+    {
+        // This state reuses the existing teleport→mount→fly logic
+        // The entry point sets up CurrentLocation, then we drive the sub-flow here
+
+        var nav = _plugin.NavigationService;
+        var elapsed = (DateTime.Now - stateStartTime).TotalSeconds;
+
+        // Step 1: Teleport if needed
+        if (!stateActionIssued)
+        {
+            if (CurrentLocation == null)
+            {
+                HandleError("[CycleMapLocs] No location set");
+                return;
+            }
+
+            if (Plugin.ClientState.TerritoryType == CurrentLocation.TerritoryId)
+            {
+                // Already in zone - skip to mounting
+                stateActionIssued = true;
+                mountAttemptStart = DateTime.MinValue;
+                mountAttempts = 0;
+                // Fall through to mount/fly logic below
+            }
+            else if (CurrentLocation.NearestAetheryteId > 0)
+            {
+                nav.TeleportToAetheryte(CurrentLocation.NearestAetheryteId);
+                stateActionIssued = true;
+                cycleTeleportIssued = true;
+                cycleTeleportTime = DateTime.Now;
+                return;
+            }
+            else
+            {
+                // No aetheryte found - skip this location
+                _plugin.AddDebugLog($"[CycleMapLocs] No aetheryte for {CurrentLocation.ZoneName} - skipping");
+                cycleMapLocationIndex++;
+                stateStartTime = DateTime.Now;
+                stateActionIssued = false;
+                SetupNextCycleMapLocation();
+                return;
+            }
+        }
+
+        // Step 2: Wait for teleport
+        if (cycleTeleportIssued)
+        {
+            if ((DateTime.Now - cycleTeleportTime).TotalSeconds < 5.0) return;
+            if (nav.IsTeleporting()) return;
+
+            // Arrived - record aetheryte position passively
+            if (CurrentLocation?.NearestAetheryteId > 0)
+            {
+                var pos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+                if (pos != Vector3.Zero)
+                {
+                    _plugin.AetherytePositionDatabase.RecordPosition(
+                        CurrentLocation.NearestAetheryteId,
+                        CurrentLocation.NearestAetheryteName,
+                        pos.X, pos.Y, pos.Z);
+                }
+            }
+            cycleTeleportIssued = false;
+        }
+
+        // Step 3: Mount if not mounted
+        if (!nav.IsMounted() && !nav.IsFlying())
+        {
+            if (mountAttemptStart == DateTime.MinValue)
+            {
+                mountAttemptStart = DateTime.Now;
+                mountAttempts = 0;
+            }
+            var mountElapsed = (DateTime.Now - mountAttemptStart).TotalSeconds;
+            if (mountElapsed < 3.0) return; // Grace period
+            if (mountAttempts < 5 && mountElapsed >= mountAttempts * 3.0)
+            {
+                mountAttempts++;
+                nav.MountUp();
+                return;
+            }
+            if (mountAttempts >= 5)
+            {
+                _plugin.AddDebugLog($"[CycleMapLocs] Mount failed - skipping location");
+                cycleMapLocationIndex++;
+                stateStartTime = DateTime.Now;
+                stateActionIssued = false;
+                cycleTeleportIssued = false;
+                mountAttemptStart = DateTime.MinValue;
+                mountAttempts = 0;
+                SetupNextCycleMapLocation();
+                return;
+            }
+            return;
+        }
+
+        // Step 4: Fly to flag
+        if (nav.IsMounted() && CurrentLocation != null)
+        {
+            var playerPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+            var target = new Vector3(CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z);
+            var xzDist = Math.Sqrt(Math.Pow(playerPos.X - target.X, 2) + Math.Pow(playerPos.Z - target.Z, 2));
+
+            if (xzDist < 15.0)
+            {
+                // Close enough - record position and move to next
+                _plugin.AddDebugLog($"[CycleMapLocs] Arrived near flag ({xzDist:F0}y) - recording position");
+
+                if (playerPos != Vector3.Zero)
+                {
+                    var mapItemSheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+                    var entry = cycleMapLocationQueue[cycleMapLocationIndex];
+                    _plugin.MapLocationDatabase.RecordLocation(
+                        CurrentLocation.TerritoryId,
+                        CurrentLocation.ZoneName,
+                        entry.MapName,
+                        CurrentLocation.X, CurrentLocation.Y, CurrentLocation.Z,
+                        playerPos.X, playerPos.Y, playerPos.Z);
+                }
+
+                cycleMapLocationIndex++;
+                stateStartTime = DateTime.Now;
+                stateActionIssued = false;
+                cycleTeleportIssued = false;
+                mountAttemptStart = DateTime.MinValue;
+                mountAttempts = 0;
+                SetupNextCycleMapLocation();
+                return;
+            }
+
+            // Not close yet - fly there
+            if (!lastStuckCheckPos.Equals(Vector3.Zero) || lastStuckCheckTime == DateTime.MinValue ||
+                (DateTime.Now - lastStuckCheckTime).TotalSeconds > 5.0)
+            {
+                var flyTarget = new Vector3(CurrentLocation.X, CurrentLocation.Y + 50f, CurrentLocation.Z);
+                nav.FlyToPosition(flyTarget);
+                lastStuckCheckPos = playerPos;
+                lastStuckCheckTime = DateTime.Now;
+            }
+        }
+
+        StateDetail = $"Location {cycleMapLocationIndex + 1}/{cycleMapLocationQueue.Count}: {CurrentLocation?.ZoneName ?? "?"} ({elapsed:F0}s)";
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

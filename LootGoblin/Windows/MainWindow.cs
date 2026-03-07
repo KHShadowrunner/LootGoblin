@@ -293,10 +293,79 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine();
             ImGui.Text($"TreasureSpot: {db.TreasureSpotEntries.Count}");
 
+            // === Aetheryte Position Database Summary ===
+            var aethDb = plugin.AetherytePositionDatabase;
+            if (Plugin.ClientState.IsLoggedIn)
+            {
+                var totalUnlocked = aethDb.GetTotalUnlockedCount();
+                var recorded = aethDb.Count;
+                var missing = totalUnlocked - recorded;
+                ImGui.Text($"  Aetherytes: {recorded}/{totalUnlocked} positions stored  ");
+                if (missing > 0)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(ColorYellow, $"({missing} missing)");
+                }
+                else if (totalUnlocked > 0)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(ColorGreen, "(all recorded)");
+                }
+            }
+            else
+            {
+                ImGui.Text($"  Aetherytes: {aethDb.Count} positions stored");
+            }
+
             var userOnly = db.UserOnlyResolved;
             if (userOnly > 0)
             {
                 ImGui.TextColored(ColorCyan, $"  ★ You have {userOnly} location(s) not in community DB - consider sharing!");
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Open Data Folder"))
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", aethDb.ConfigDirectory);
+                    }
+                    catch { }
+                }
+            }
+
+            ImGui.Spacing();
+
+            // === Cycling Mode Controls ===
+            if (Plugin.ClientState.IsLoggedIn)
+            {
+                var sm = plugin.StateManager;
+                var isBusy = sm.State != BotState.Idle && sm.State != BotState.Error && sm.State != BotState.Completed;
+
+                if (sm.State == BotState.CyclingAetherytes || sm.State == BotState.CyclingMapLocations)
+                {
+                    ImGui.TextColored(ColorCyan, $"  {sm.StateDetail}");
+                    if (ImGui.Button("Stop Cycling"))
+                    {
+                        sm.Stop();
+                    }
+                }
+                else
+                {
+                    if (isBusy)
+                        ImGui.BeginDisabled();
+
+                    if (ImGui.Button("Cycle Missing Aetherytes"))
+                    {
+                        sm.StartCyclingAetherytes();
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.Button("Cycle Missing XYZ"))
+                    {
+                        sm.StartCyclingMapLocations();
+                    }
+
+                    if (isBusy)
+                        ImGui.EndDisabled();
+                }
             }
 
             ImGui.Spacing();

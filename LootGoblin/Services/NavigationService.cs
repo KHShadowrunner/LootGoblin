@@ -283,6 +283,26 @@ public class NavigationService : IDisposable
                 return 0;
             }
 
+            // Method 1c: AetherytePositionDatabase - stored positions from previous teleport arrivals
+            if (_plugin.AetherytePositionDatabase != null && candidates.Any(c => c.WorldPos == Vector3.Zero))
+            {
+                int dbHits = 0;
+                for (int ci = 0; ci < candidates.Count; ci++)
+                {
+                    if (candidates[ci].WorldPos != Vector3.Zero) continue;
+                    var storedPos = _plugin.AetherytePositionDatabase.GetPosition(candidates[ci].Id);
+                    if (storedPos != null)
+                    {
+                        candidates[ci] = (candidates[ci].Id, candidates[ci].Name, candidates[ci].Cost,
+                            new Vector3(storedPos.X, storedPos.Y, storedPos.Z));
+                        _plugin.AddDebugLog($"  [AetheryteDB] {candidates[ci].Name}: stored pos ({storedPos.X:F1}, {storedPos.Y:F1}, {storedPos.Z:F1})");
+                        dbHits++;
+                    }
+                }
+                if (dbHits > 0)
+                    _plugin.AddDebugLog($"[Aetheryte] AetheryteDB resolved {dbHits}/{candidates.Count(c => c.WorldPos == Vector3.Zero) + dbHits} missing positions");
+            }
+
             // Method 2: MapMarker fallback for candidates with no position
             // MapMarker DataKey does NOT match Aetheryte RowId — match by name or by collecting
             // all aetheryte-type markers and assigning to nearest candidate

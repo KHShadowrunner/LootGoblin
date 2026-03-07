@@ -16,6 +16,8 @@ public enum BotState
     DungeonCombat,
     DungeonLooting,
     DungeonProgressing,
+    CyclingAetherytes,
+    CyclingMapLocations,
     Completed,
     Error,
 }
