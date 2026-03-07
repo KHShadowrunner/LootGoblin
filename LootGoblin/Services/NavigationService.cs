@@ -150,8 +150,17 @@ public class NavigationService : IDisposable
         _plugin.AddDebugLog("Flying to flag via vnavmesh.");
     }
 
-    public unsafe uint FindNearestAetheryte(uint territoryId, Vector3 targetPosition = default)
+    /// <summary>
+    /// Find the nearest unlocked aetheryte in the given territory to the target position.
+    /// Uses XYZ distance when community RealXYZ is available for the destination, XZ-only otherwise.
+    /// </summary>
+    /// <param name="bestAetheryteDistance">Output: distance from the best aetheryte to the destination (for comparison with player distance)</param>
+    /// <param name="usedXyzComparison">Output: whether full XYZ comparison was used (true) or XZ-only (false)</param>
+    public unsafe uint FindNearestAetheryte(uint territoryId, Vector3 targetPosition, out double bestAetheryteDistance, out bool usedXyzComparison)
     {
+        bestAetheryteDistance = double.MaxValue;
+        usedXyzComparison = false;
+
         try
         {
             var telepo = Telepo.Instance();
@@ -444,11 +453,55 @@ public class NavigationService : IDisposable
                 }
             }
 
+            // Check MapLocationDatabase for community RealXYZ of the destination
+            Vector3 realDestination = default;
+            bool hasRealDestY = false;
+            if (_plugin.MapLocationDatabase != null && targetPosition != default)
+            {
+                var dbEntry = _plugin.MapLocationDatabase.FindEntry(territoryId, targetPosition.X, targetPosition.Z);
+                if (dbEntry != null && dbEntry.HasRealXYZ)
+                {
+                    realDestination = new Vector3(dbEntry.RealX, dbEntry.RealY, dbEntry.RealZ);
+                    hasRealDestY = true;
+                    _plugin.AddDebugLog($"[Aetheryte] Community RealXYZ found for destination: ({dbEntry.RealX:F1}, {dbEntry.RealY:F1}, {dbEntry.RealZ:F1}) - using XYZ comparison");
+                }
+                else
+                {
+                    _plugin.AddDebugLog($"[Aetheryte] No community RealXYZ for destination - using XZ-only comparison");
+                }
+            }
+
+            usedXyzComparison = hasRealDestY;
+
+            // The comparison target: use RealXYZ if available, otherwise use flag XZ
+            var compTarget = hasRealDestY ? realDestination : targetPosition;
+
             // Log all candidates with final positions
             foreach (var c in candidates)
             {
                 var posStr = c.WorldPos != Vector3.Zero ? $"({c.WorldPos.X:F1}, {c.WorldPos.Y:F1}, {c.WorldPos.Z:F1})" : "NO_POS";
-                _plugin.AddDebugLog($"  [Candidate] {c.Name} (ID: {c.Id}, Cost: {c.Cost}g, Pos: {posStr})");
+                // Determine if this aetheryte has a real Y value (from AetheryteDB, not MapMarker which sets Y=0)
+                var hasRealAethY = c.WorldPos != Vector3.Zero && _plugin.AetherytePositionDatabase != null && _plugin.AetherytePositionDatabase.HasPosition(c.Id);
+                var distMode = (hasRealDestY && hasRealAethY) ? "XYZ" : "XZ";
+                double dist;
+                if (hasRealDestY && hasRealAethY)
+                {
+                    var dx = c.WorldPos.X - compTarget.X;
+                    var dy = c.WorldPos.Y - compTarget.Y;
+                    var dz = c.WorldPos.Z - compTarget.Z;
+                    dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                }
+                else if (c.WorldPos != Vector3.Zero)
+                {
+                    var dx = c.WorldPos.X - compTarget.X;
+                    var dz = c.WorldPos.Z - compTarget.Z;
+                    dist = Math.Sqrt(dx * dx + dz * dz);
+                }
+                else
+                {
+                    dist = double.MaxValue;
+                }
+                _plugin.AddDebugLog($"  [Candidate] {c.Name} (ID: {c.Id}, Cost: {c.Cost}g, Pos: {posStr}, {distMode} dist: {dist:F0}y)");
             }
 
             uint bestId;
@@ -460,15 +513,43 @@ public class NavigationService : IDisposable
                 var closest = candidates
                     .Where(c => c.WorldPos != Vector3.Zero)
                     .OrderBy(c => {
-                        var dx = c.WorldPos.X - targetPosition.X;
-                        var dz = c.WorldPos.Z - targetPosition.Z;
-                        return dx * dx + dz * dz;
+                        // Use full XYZ if we have real Y for BOTH aetheryte and destination
+                        var hasRealAethY = _plugin.AetherytePositionDatabase != null && _plugin.AetherytePositionDatabase.HasPosition(c.Id);
+                        if (hasRealDestY && hasRealAethY)
+                        {
+                            var dx = c.WorldPos.X - compTarget.X;
+                            var dy = c.WorldPos.Y - compTarget.Y;
+                            var dz = c.WorldPos.Z - compTarget.Z;
+                            return dx * dx + dy * dy + dz * dz;
+                        }
+                        else
+                        {
+                            var dx = c.WorldPos.X - compTarget.X;
+                            var dz = c.WorldPos.Z - compTarget.Z;
+                            return dx * dx + dz * dz;
+                        }
                     })
                     .First();
                 bestId = closest.Id;
                 bestName = closest.Name;
-                var xzDist = Math.Sqrt(Math.Pow(closest.WorldPos.X - targetPosition.X, 2) + Math.Pow(closest.WorldPos.Z - targetPosition.Z, 2));
-                _plugin.AddDebugLog($"[Aetheryte] Selected closest: {bestName} (ID: {bestId}, XZ dist: {xzDist:F0}y from flag)");
+
+                // Compute distance for the winner using same rules
+                var bestHasRealY = _plugin.AetherytePositionDatabase != null && _plugin.AetherytePositionDatabase.HasPosition(closest.Id);
+                if (hasRealDestY && bestHasRealY)
+                {
+                    var dx = closest.WorldPos.X - compTarget.X;
+                    var dy = closest.WorldPos.Y - compTarget.Y;
+                    var dz = closest.WorldPos.Z - compTarget.Z;
+                    bestAetheryteDistance = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    _plugin.AddDebugLog($"[Aetheryte] Selected closest (XYZ): {bestName} (ID: {bestId}, dist: {bestAetheryteDistance:F0}y)");
+                }
+                else
+                {
+                    var dx = closest.WorldPos.X - compTarget.X;
+                    var dz = closest.WorldPos.Z - compTarget.Z;
+                    bestAetheryteDistance = Math.Sqrt(dx * dx + dz * dz);
+                    _plugin.AddDebugLog($"[Aetheryte] Selected closest (XZ): {bestName} (ID: {bestId}, dist: {bestAetheryteDistance:F0}y)");
+                }
             }
             else
             {
@@ -476,6 +557,7 @@ public class NavigationService : IDisposable
                 var cheapest = candidates.OrderBy(c => c.Cost).First();
                 bestId = cheapest.Id;
                 bestName = cheapest.Name;
+                bestAetheryteDistance = double.MaxValue;
                 _plugin.AddDebugLog($"[Aetheryte] FALLBACK cheapest: {bestName} (ID: {bestId}, Cost: {cheapest.Cost}g) [no position data]");
             }
 
@@ -485,6 +567,8 @@ public class NavigationService : IDisposable
         {
             _log.Error($"Error finding nearest aetheryte: {ex.Message}");
             _plugin.AddDebugLog($"[Aetheryte] FATAL EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            bestAetheryteDistance = double.MaxValue;
+            usedXyzComparison = false;
             return 0;
         }
     }

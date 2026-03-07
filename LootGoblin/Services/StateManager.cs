@@ -522,7 +522,7 @@ public class StateManager : IDisposable
         {
             // Find nearest aetheryte to navigate from (pass flag position for closest-to-target selection)
             var flagPos = new Vector3(location.X, location.Y, location.Z);
-            var aetheryteId = _plugin.NavigationService.FindNearestAetheryte(location.TerritoryId, flagPos);
+            var aetheryteId = _plugin.NavigationService.FindNearestAetheryte(location.TerritoryId, flagPos, out var bestAethDist, out var usedXyz);
             location.NearestAetheryteId = aetheryteId;
 
             // Populate aetheryte name for passive recording
@@ -544,20 +544,47 @@ public class StateManager : IDisposable
 
             if (Plugin.ClientState.TerritoryType == location.TerritoryId)
             {
-                // Already in the right zone - check if a closer aetheryte exists
+                // Already in zone - compare player distance vs aetheryte distance to decide if teleporting is worth it
                 var playerPos = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
-                var playerDistToFlag = Math.Sqrt(Math.Pow(playerPos.X - location.X, 2) + Math.Pow(playerPos.Z - location.Z, 2));
-
-                if (location.NearestAetheryteId != 0 && playerDistToFlag > 200)
+                double playerDist;
+                if (usedXyz)
                 {
-                    // We're far from the flag - teleport to nearest aetheryte
-                    _plugin.AddDebugLog($"[DetectingLocation] Already in zone but {playerDistToFlag:F0}y from flag - teleporting to closer aetheryte");
-                    TransitionTo(BotState.Teleporting, $"In zone but far ({playerDistToFlag:F0}y) - teleporting closer...");
+                    // We have community RealXYZ - use full 3D distance for player too
+                    var dbEntry = _plugin.MapLocationDatabase?.FindEntry(location.TerritoryId, location.X, location.Z);
+                    if (dbEntry != null && dbEntry.HasRealXYZ)
+                    {
+                        var dx = playerPos.X - dbEntry.RealX;
+                        var dy = playerPos.Y - dbEntry.RealY;
+                        var dz = playerPos.Z - dbEntry.RealZ;
+                        playerDist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    }
+                    else
+                    {
+                        var dx = playerPos.X - location.X;
+                        var dz = playerPos.Z - location.Z;
+                        playerDist = Math.Sqrt(dx * dx + dz * dz);
+                    }
                 }
                 else
                 {
-                    _plugin.AddDebugLog($"[DetectingLocation] Already in zone, {playerDistToFlag:F0}y from flag - mounting up");
-                    TransitionTo(BotState.Mounting, "Already in zone! Mounting up...");
+                    // No community RealXYZ - use XZ only for player distance
+                    var dx = playerPos.X - location.X;
+                    var dz = playerPos.Z - location.Z;
+                    playerDist = Math.Sqrt(dx * dx + dz * dz);
+                }
+
+                _plugin.AddDebugLog($"[DetectingLocation] Already in zone: player {(usedXyz ? "XYZ" : "XZ")} dist={playerDist:F0}y, best aetheryte dist={bestAethDist:F0}y");
+
+                if (location.NearestAetheryteId != 0 && bestAethDist < playerDist)
+                {
+                    // Aetheryte is closer than player - teleport
+                    _plugin.AddDebugLog($"[DetectingLocation] Aetheryte is closer ({bestAethDist:F0}y < {playerDist:F0}y) - teleporting");
+                    TransitionTo(BotState.Teleporting, $"In zone but aetheryte closer ({bestAethDist:F0}y vs {playerDist:F0}y) - teleporting...");
+                }
+                else
+                {
+                    _plugin.AddDebugLog($"[DetectingLocation] Player is closer ({playerDist:F0}y <= {bestAethDist:F0}y) - mounting up, no teleport needed");
+                    TransitionTo(BotState.Mounting, "Already in zone & closer than aetheryte! Mounting up...");
                 }
             }
             else
@@ -2992,7 +3019,7 @@ public class StateManager : IDisposable
 
         var entry = cycleMapLocationQueue[cycleMapLocationIndex];
         var flagPos = new Vector3(entry.FlagX, entry.FlagY, entry.FlagZ);
-        var aetheryteId = _plugin.NavigationService.FindNearestAetheryte(entry.TerritoryId, flagPos);
+        var aetheryteId = _plugin.NavigationService.FindNearestAetheryte(entry.TerritoryId, flagPos, out _, out _);
 
         var location = new MapLocation
         {
